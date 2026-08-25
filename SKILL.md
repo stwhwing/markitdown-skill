@@ -3,7 +3,13 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (OCR), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to deposit (沉淀) its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI."
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.2.0
+version: 1.3.0
+category: 办公效率
+platforms: [WorkBuddy, QClaw]
+slug: stwhwing-markitdown-skill
+displayName: MarkItDown
+summary: 文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL），并在总结/分析大文件或网页时主动转纯文本以省 Token。
+license: MIT
 homepage: https://github.com/microsoft/markitdown
 allowed-tools: Read,Write,Bash,Glob
 metadata:
@@ -98,7 +104,7 @@ markitdown document.pdf -o document.md
 # Using included script (run with the Python that has markitdown installed)
 python "<skill-dir>/scripts/batch_convert.py" docs/*.pdf -o markdown/ -v
 # <skill-dir> = this skill's own directory (the folder containing this SKILL.md).
-# On Linux servers (e.g. 191) where `markitdown` is installed system-wide, just use
+# On Linux servers where `markitdown` is installed system-wide, just use
 #   python3 "<skill-dir>/scripts/batch_convert.py" ...   (markitdown is on the system python3).
 # WorkBuddy (Windows): use the managed Python that has markitdown, e.g.
 #   ~/.workbuddy/binaries/python/envs/default/Scripts/python.exe ; do NOT rely on a system
@@ -127,7 +133,7 @@ ingest a web page (convert the link to Markdown first, then summarize / deposit)
 1. Convert the source to Markdown with `markitdown` (the CLI or `scripts/batch_convert.py`).
    For a webpage link, just pass the URL: `markitdown "https://..." -o page.md`
 2. Feed the resulting Markdown to the AI **instead of the raw file / raw HTML**.
-3. Report the cost (and, for PDF/images/web pages, the saving) with `scripts/token_saver.py`:
+3. Report the cost (and, for PDF/images/web pages, the saving) locally with `scripts/token_saver.py`:
 
    ```bash
    # PDF/images: pass --pages to estimate the raw baseline
@@ -138,18 +144,12 @@ ingest a web page (convert the link to Markdown first, then summarize / deposit)
    python "<skill-dir>/scripts/token_saver.py" page.md --raw-estimate $(( $(curl -s "https://..." | wc -c) / 4 ))
    ```
 
-   It prints the approximate Markdown token cost (the actual AI cost). A saving % is
-   shown ONLY when a real baseline is given (`--pages` / `--raw-estimate` / text-like
-   source); for compressed binaries without a baseline it reports only the cost — it
-   never fabricates a number. All figures use a chars/4 heuristic and are estimates.
-
-   **报告到 191 看板（标准步骤，建议在 191 服务器上执行）**：用 `--emit-json --agent <name>` 输出一行 JSON，
-   再 POST 到看板（仅在有真实基线时累计节省，二进制无基线不会编造数字）：
-   ```bash
-   python3 "<skill-dir>/scripts/token_saver.py" document.pdf --pages 100 --agent openclaw --emit-json \
-     | curl -s -X POST http://127.0.0.1:8088/api/savings -H 'Content-Type: application/json' -d @-
-   ```
-   `<name>` 用调用此技能的实际智能体：`openclaw` / `hermes` / `workbuddy`。本机 WorkBuddy 走 `http://localhost:8088` 隧道。
+   It prints the approximate Markdown token cost (the actual AI cost) and, with
+   `--emit-json`, one machine-readable JSON line you can pipe into your own logging or
+   metrics pipeline. A saving % is shown ONLY when a real baseline is given
+   (`--pages` / `--raw-estimate` / text-like source); for compressed binaries without a
+   baseline it reports only the cost — it never fabricates a number. All figures use a
+   chars/4 heuristic and are estimates.
 
 4. For batch, convert a whole folder to `.md` first, then analyze the `.md` files.
 
