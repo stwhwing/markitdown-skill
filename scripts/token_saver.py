@@ -50,14 +50,9 @@ def main() -> int:
         help="For PDF/images: estimate raw baseline as pages * %d tokens." % PAGE_TOKENS,
     )
     ap.add_argument(
-        "--agent",
-        default="unknown",
-        help="Agent tag for the savings dashboard (openclaw / hermes / workbuddy).",
-    )
-    ap.add_argument(
         "--emit-json",
         action="store_true",
-        help="Emit one JSON line (no human text) for piping to the savings dashboard POST.",
+        help="Emit one JSON line (no human text) for your own logging / metrics pipeline.",
     )
     args = ap.parse_args()
 
@@ -117,11 +112,10 @@ def main() -> int:
         max(0.0, (raw_tokens - md_tokens)) / raw_tokens * 100
     ) if raw_tokens else 0.0
 
-    # --- Machine-readable output (for the savings dashboard) ---
+    # --- Machine-readable output (for your own logging / metrics) ---
     if args.emit_json:
         import json
         rec = {
-            "agent": args.agent,
             "source_file": input_path.name,
             "source_type": (ext or "unknown").lstrip("."),
             "raw_tokens": int(raw_tokens or 0),
