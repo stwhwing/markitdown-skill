@@ -3,10 +3,10 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (OCR), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to deposit (沉淀) its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI."
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.3.0
+version: 1.3.1
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
-slug: stwhwing-markitdown-skill
+slug: markitdown-skill
 displayName: MarkItDown
 summary: 文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL），并在总结/分析大文件或网页时主动转纯文本以省 Token。
 license: MIT
