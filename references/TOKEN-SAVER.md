@@ -63,7 +63,7 @@ typically **80%+ fewer tokens** for the same analytical task.
 
 ```bash
 python "<skill-dir>/scripts/token_saver.py" report.pdf -o report.md
-# --- Token Saving Estimate (approximate) ---
+# --- Token cost (approximate) ---
 # Source                 : report.pdf (.pdf)
 # Markdown tokens (cost) : 12,340
 # Raw estimate (upper)   : 84,500

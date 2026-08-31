@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Token-Saving helper for the MarkItDown skill.
+Token-cost estimator for the MarkItDown skill.
 
-Converts a document to Markdown via markitdown and reports the token cost the AI actually
-pays for the cleaned Markdown. It can ALSO estimate a saving %, but ONLY when a real raw
-baseline is available:
+Converts a document to Markdown via markitdown and reports the approximate token cost
+the AI actually pays for the cleaned Markdown. It can ALSO estimate a saving %, but ONLY
+when a real raw baseline is available:
 
   - text-like files (.txt/.md/.csv/.json/...)  -> baseline = source text / 4 (meaningful)
   - PDF / images                               -> pass --pages N  (baseline = N * 1500, estimate)
@@ -20,6 +20,7 @@ Usage:
   python token_saver.py INPUT [-o OUTPUT.md] [--pages N] [--raw-estimate N]
 """
 import sys
+import json
 import argparse
 from pathlib import Path
 
@@ -48,11 +49,6 @@ def main() -> int:
         "--pages",
         type=int,
         help="For PDF/images: estimate raw baseline as pages * %d tokens." % PAGE_TOKENS,
-    )
-    ap.add_argument(
-        "--emit-json",
-        action="store_true",
-        help="Emit one JSON line (no human text) for your own logging / metrics pipeline.",
     )
     args = ap.parse_args()
 
@@ -112,21 +108,6 @@ def main() -> int:
         max(0.0, (raw_tokens - md_tokens)) / raw_tokens * 100
     ) if raw_tokens else 0.0
 
-    # --- Machine-readable output (for your own logging / metrics) ---
-    if args.emit_json:
-        import json
-        rec = {
-            "source_file": input_path.name,
-            "source_type": (ext or "unknown").lstrip("."),
-            "raw_tokens": int(raw_tokens or 0),
-            "md_tokens": int(md_tokens),
-            "saved_tokens": int(saved_tokens),
-            "saved_pct": round(saved_pct, 1),
-            "basis": basis or "none",
-        }
-        print(json.dumps(rec, ensure_ascii=False))
-        return 0
-
     # --- Human-readable report ---
     print("--- Token cost (approximate) ---")
     print(f"Source           : {input_path.name} ({ext or 'unknown'})")
@@ -140,6 +121,7 @@ def main() -> int:
         print("  it is fed the Markdown above. For a saving estimate, re-run with")
         print("  --pages N (PDF/images) or --raw-estimate N.")
     print("Note: heuristic chars/4; CJK text differs. Numbers are order-of-magnitude.")
+
     return 0
 
 
