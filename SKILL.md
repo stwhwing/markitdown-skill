@@ -137,7 +137,7 @@ done
 > **本工作流为可选增强，不是核心功能。** 技能的核心能力（文档 / 网页 → Markdown）完全不依赖它。
 > 它包含两个本地、互不依赖、且**不向任何服务器上报**的工具：`token_saver.py`（某次转换的成本/节省估算）
 > 与 `measure_tokens.py`（任意文本/文件的 token 量测与对比）；方法论见 [TOKEN-AUDIT.md](references/TOKEN-AUDIT.md)。
-> 公开版不内置 pm-dashboard 上报（那是私有版的能力）。不需要省 token 报告时，可完全忽略本段。
+> 公开版不包含任何上报组件，全程本地运行。不需要省 token 报告时，可完全忽略本段。
 
 Large, richly-formatted documents (PDFs, PPTX, DOCX, scanned images) carry heavy
 layout / font / header / footer / embedded-object noise that inflates token cost. Converting

@@ -68,7 +68,7 @@ typically **80%+ fewer tokens** for the same analytical task.
 3. **实测对比法（最可靠）**：同一份材料，分别用「整篇原文/HTML 喂 AI」与「转换后 Grep+按需读」两种方式，让模型跑同一任务，对比两次回复的实际 token 用量（多数平台/网关可在用量明细里看到）。差值才是端到端真实节省。
 4. **JSON 回退也缩量**：网页 SPA 兜底抽取 `__NEXT_DATA__` 时，`url_to_markdown.py` 已改用**递归平铺抽取**，只留正文类字段，避免把 10–20KB 的原生 JSON 灌进上下文。
 
-> 注意：`token_saver.py` 是**本地**估算器，公开版不会向任何服务器上报。需要跨端聚合上报请看私有版（内置 pm-dashboard 上报，默认仅本地 spool，隧道建好再 flush）。
+> 注意：`token_saver.py` 是**本地**估算器，公开版不会向任何服务器上报任何数据。跨端聚合上报属于私有版能力，公开版不涉及。
 
 ## 配套：通用 Token 审计（可选组件）
 
