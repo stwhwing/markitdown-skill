@@ -59,6 +59,27 @@ typically **80%+ fewer tokens** for the same analytical task.
 - When the task explicitly needs layout (e.g. "recreate this slide's design").
 - When pixel-perfect fidelity of tables/figures matters more than token cost.
 
+## 如何审计 token 成本（Grep 优先方法）
+
+`token_saver.py` 给出「Markdown 实际成本」的单点估算。要审计一次真实任务的省 token 效果，建议配合**链路级**方法：
+
+1. **转换前先测基线**：对大文件/网页，先看原始体量。文本类（`.txt/.md/.csv/.json`）基线 = 源文本 ÷ 4；PDF/图片用 `--pages N`；或用 `--raw-estimate N` 代入你已知的账单数。
+2. **转换 → Grep → 按需 Read**：转成 Markdown 后，不要整篇读。先 `Grep` 目标章节/关键词，只 `Read` 命中段落。这一步的节省往往比「转换」本身更大，但 `token_saver.py` 不计入——它只量化「文件 → Markdown」这一段。
+3. **实测对比法（最可靠）**：同一份材料，分别用「整篇原文/HTML 喂 AI」与「转换后 Grep+按需读」两种方式，让模型跑同一任务，对比两次回复的实际 token 用量（多数平台/网关可在用量明细里看到）。差值才是端到端真实节省。
+4. **JSON 回退也缩量**：网页 SPA 兜底抽取 `__NEXT_DATA__` 时，`url_to_markdown.py` 已改用**递归平铺抽取**，只留正文类字段，避免把 10–20KB 的原生 JSON 灌进上下文。
+
+> 注意：`token_saver.py` 是**本地**估算器，公开版不会向任何服务器上报。需要跨端聚合上报请看私有版（内置 pm-dashboard 上报，默认仅本地 spool，隧道建好再 flush）。
+
+## 配套：通用 Token 审计（可选组件）
+
+Token-Saving 工作流整体为**可选 / OPTIONAL**。除上面的「单次转换成本估算」外，本技能还附带
+**通用 token 审计**能力，同样可选、同样不向任何服务器上报：
+
+- `scripts/measure_tokens.py` — **任意文本/文件**的 token 量级量测与 `--compare` 对比（不限于转换产物）。
+- `references/TOKEN-AUDIT.md` — 审计流程、缩量技术排序、WebFetch-vs-skill 实测案例与诚实口径。
+
+核心能力（文档/网页 → Markdown）不依赖以上任何一项。详见 [TOKEN-AUDIT.md](TOKEN-AUDIT.md)。
+
 ## Example
 
 ```bash

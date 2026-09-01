@@ -140,6 +140,72 @@ def extract_embedded_json(url):
     return None
 
 # ---------------------------------------------------------------------------
+# Recursive flatten of embedded JSON → compact Markdown (token-saving)
+# ---------------------------------------------------------------------------
+# Keys whose values are almost always framework/boilerplate, never content.
+_SKIP_KEYS = {
+    "css", "script", "scripts", "styles", "style", "chunks", "head",
+    "webpack", "_nextI18Next", "dynamicIds", "runtimeConfig", "buildId",
+    "amp", "apis", "__proto__", "prototype", "constructor",
+    "staticQueryResults", "staticQueryResult", "pageContext",
+}
+
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _looks_like_content(s):
+    """Heuristic: keep only prose-like strings, drop encoded/css/url noise."""
+    s = s.strip()
+    if not s or len(s) < 12:
+        return False
+    if s.startswith(("data:", "http://", "https://", "//", "blob:", "mailto:")):
+        return False
+    # long single-token blobs (base64 / minified) with no spaces and no CJK
+    if len(s) > 200 and " " not in s and not _CJK.search(s):
+        return False
+    if _CJK.search(s):
+        return True
+    return s.count(" ") >= 2
+
+
+def _recursive_collect(obj, out, max_items=400, max_list=80):
+    """Walk the JSON tree, collecting content-bearing string leaves only."""
+    if len(out) >= max_items:
+        return
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _recursive_collect(v, out, max_items, max_list)
+    elif isinstance(obj, list):
+        for item in obj[:max_list]:
+            _recursive_collect(item, out, max_items, max_list)
+    elif isinstance(obj, str):
+        if _looks_like_content(obj):
+            out.append(obj.strip())
+
+
+def json_to_markdown(json_str, max_chars=20000):
+    """Parse embedded SSR/JSON and return compact prose Markdown.
+
+    Replaces the old behaviour of dumping the whole __NEXT_DATA__ blob (often
+    10–20 KB) inline. A recursive flatten keeps only content-bearing string
+    leaves, cutting the SPA-fallback token footprint dramatically.
+    """
+    try:
+        data = json.loads(json_str)
+    except Exception:
+        return None
+    out = []
+    _recursive_collect(data, out)
+    if not out:
+        return None
+    text = "\n\n".join(out)
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n\n… (truncated)"
+    return (f"<!-- content extracted from SPA embedded JSON "
+            f"(recursive flatten) -->\n\n{text}\n")
+
+
+# ---------------------------------------------------------------------------
 # emit
 # ---------------------------------------------------------------------------
 def emit(md, out):
@@ -197,10 +263,13 @@ def main():
             print("[spa-fallback] browser render produced little text; trying JSON extraction",
                   file=sys.stderr)
 
-    # 3) JSON extraction
+    # 3) JSON extraction — 递归平铺抽取，只保留正文类字段，从源头缩量
     js = extract_embedded_json(args.url)
     if js:
-        md = f"<!-- embedded JSON extracted from SPA -->\n\n```json\n{js}\n```\n"
+        md = json_to_markdown(js)
+        if not md:
+            # flatten produced nothing usable (e.g. non-JSON); keep old raw fallback
+            md = f"<!-- embedded JSON extracted from SPA (flatten failed, raw fallback) -->\n\n```json\n{js}\n```\n"
         emit(md, args.output)
         return
 

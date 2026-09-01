@@ -3,7 +3,7 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (OCR), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.4.0
+version: 1.4.1
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
@@ -46,7 +46,7 @@ Documentation and utilities for converting documents to Markdown using Microsoft
 
 1. **第一步（推荐）**：运行本技能的 `scripts/url_to_markdown.py "<url>" -o /tmp/page.md` 把网页转成 Markdown。
    - 它会自动处理 JS 渲染的 SPA（无头 chromium 回退），比裸 `markitdown <url>` 更可靠，也不会漏正文。
-2. **第二步**：读取 `/tmp/page.md` 的 Markdown 文本，再进行分析 / 总结 / 提取，而**不是**原始 HTML。
+2. **第二步**：读取 `/tmp/page.md` 的 Markdown 文本，再进行分析 / 总结 / 提取，而**不是**原始 HTML。处理时养成「先 Grep / 窄范围 Read，别整篇读」的习惯——只 Grep 目标章节或关键词，按需 Read 对应段落；仅当确需通读全文才整篇读，从源头省 token（详见下方「Token 节省：Grep 优先」）。
 3. **⚠️ 不推荐以下"坏路径"（脆弱、易失败）**：
    - ❌ 任何 `curl` + 正则手工解析 HTML / 微信正文（手写抽 `js_content` 等字段）；
    - ❌ 直接把原始 HTML 当作分析对象喂给 AI。
@@ -132,7 +132,12 @@ for file in docs/*.pdf; do
 done
 ```
 
-## Token-Saving Workflow (给 AI 减负)
+## Token-Saving Workflow (给 AI 减负) — ⚙️ 可选 / OPTIONAL
+
+> **本工作流为可选增强，不是核心功能。** 技能的核心能力（文档 / 网页 → Markdown）完全不依赖它。
+> 它包含两个本地、互不依赖、且**不向任何服务器上报**的工具：`token_saver.py`（某次转换的成本/节省估算）
+> 与 `measure_tokens.py`（任意文本/文件的 token 量测与对比）；方法论见 [TOKEN-AUDIT.md](references/TOKEN-AUDIT.md)。
+> 公开版不内置 pm-dashboard 上报（那是私有版的能力）。不需要省 token 报告时，可完全忽略本段。
 
 Large, richly-formatted documents (PDFs, PPTX, DOCX, scanned images) carry heavy
 layout / font / header / footer / embedded-object noise that inflates token cost. Converting
@@ -168,6 +173,15 @@ single most common cause of wasted tokens in document Q&A.
 the extra tokens buy no information. Details and the estimate methodology:
 [TOKEN-SAVER.md](references/TOKEN-SAVER.md).
 
+## Token 节省：Grep 优先（按需读，别整篇读）
+
+转换成 Markdown 只是第一步。喂给 AI 时，再用「先 Grep、再按需 Read」进一步缩量：
+
+- **Grep 先行**：拿到 `page.md` / `output.md` 后，先 `Grep` 目标章节标题、关键词、表格名，定位相关片段，而不是整篇塞进上下文。
+- **窄范围 Read**：只 `Read` 命中的那几段；只有确需通读（如「全文总结」）才整篇读。
+- **大文件 / 长网页**：先 `Grep` 建索引，再分批 Read 相关段落，避免一次性灌入几千行。
+- **JSON 回退也缩量**：无浏览器时抽取 SPA 内嵌 JSON（`__NEXT_DATA__` 等）现采用**递归平铺抽取**，只保留正文类字段，不再把整个 10–20KB 的 `__NEXT_DATA__` 原样灌入上下文（详见 `url_to_markdown.py` 的 `json_to_markdown`）。
+
 ## Python API
 
 ```python
@@ -190,7 +204,7 @@ python "<skill-dir>/scripts/url_to_markdown.py" "https://..." -o page.md
 ```
 
 回退优先级：① 本机 Chrome/Edge 无头 `--dump-dom`（已执行 JS 再序列化 DOM，Windows 已验证，零新依赖）；
-② 无浏览器时抽取页面内嵌 JSON（`__NEXT_DATA__` / `window.__INITIAL_STATE__` / `<script type="application/json">`）；
+② 无浏览器时抽取页面内嵌 JSON（`__NEXT_DATA__` / `window.__INITIAL_STATE__` / `<script type="application/json">`），并**递归平铺抽取**只保留正文类字段（不再把整个 10–20KB 的 `__NEXT_DATA__` 原样灌入上下文）；
 ③ 都不可用再提示改用 WebFetch（服务端渲染兜底）。
 
 Linux 服务器需先装 chromium（或 `playwright install chromium`），同样走 `--dump-dom` 技巧。
@@ -224,7 +238,8 @@ Chrome/Edge 无头渲染回退；服务器侧需先装 chromium（或 `playwrigh
 | `markitdown` Python API | Microsoft's pip package |
 | `scripts/batch_convert.py` | This skill (utility) |
 | `scripts/url_to_markdown.py` | This skill (SPA fallback utility for web pages) |
-| `scripts/token_saver.py` | This skill (local token-cost/saving estimator) |
+| `scripts/token_saver.py` | This skill (OPTIONAL local token-cost/saving estimator) |
+| `scripts/measure_tokens.py` | This skill (OPTIONAL token measurement / compare tool for any text) |
 | Documentation | This skill |
 
 ## See Also
@@ -232,4 +247,5 @@ Chrome/Edge 无头渲染回退；服务器侧需先装 chromium（或 `playwrigh
 - [USAGE-GUIDE.md](references/USAGE-GUIDE.md) - Detailed examples
 - [reference.md](references/reference.md) - Full API reference
 - [TOKEN-SAVER.md](references/TOKEN-SAVER.md) - Token-saving methodology
+- [TOKEN-AUDIT.md](references/TOKEN-AUDIT.md) - Token audit methodology (optional component)
 - [Microsoft MarkItDown](https://github.com/microsoft/markitdown) - Upstream library
