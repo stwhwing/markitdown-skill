@@ -24,6 +24,7 @@ cuts AI token cost by 80%+.
 | `SKILL.md` | Skill manifest + usage instructions (used by WorkBuddy / ClawBot-style agents) |
 | `scripts/url_to_markdown.py` | Web URL → Markdown with SPA + anti-bot fallback |
 | `scripts/token_saver.py` | Local token-cost / saving estimator |
+| `scripts/measure_tokens.py` | Token counter / cost measurement for any text |
 | `scripts/batch_convert.py` | Batch file → Markdown helper |
 | `references/reference.md` | MarkItDown API reference |
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |
@@ -58,6 +59,20 @@ Drop this folder into your agent's skill directory (e.g. `~/.workbuddy/skills/ma
 for WorkBuddy, or your platform's equivalent). The agent will then proactively convert
 files and links to Markdown before analysing them, and will route every web link through
 `url_to_markdown.py` rather than hand-rolled `curl` + regex parsing.
+
+## Security
+
+- **SSRF guard (on by default).** `scripts/url_to_markdown.py` only fetches `http`/`https`
+  URLs. By default it refuses targets that resolve to loopback, private, link-local,
+  reserved, or CGNAT (`100.64.0.0/10`) addresses, the cloud instance-metadata endpoint
+  (`169.254.169.254`), or internal hostnames (`*.local`, `*.internal`, `*.corp`, `*.lan`,
+  `*.home`, `*.intranet`). Pass `--allow-internal` only on a trusted machine when you
+  deliberately need to fetch a local/intranet page.
+- **Optional external capabilities are off by default.** The skill can optionally use
+  OpenAI image descriptions, Azure Document Intelligence, or third-party plugins, but these
+  are disabled unless you explicitly enable them and they require your consent. Never feed
+  private documents to an external service; local `markitdown` conversion does not phone
+  home.
 
 ## License
 
