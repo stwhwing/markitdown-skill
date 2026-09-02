@@ -35,8 +35,10 @@ import re
 import shutil
 import subprocess
 import sys
+import ipaddress
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 TEXT_THRESHOLD = 120  # meaningful chars below which we treat the page as a likely SPA shell
@@ -50,8 +52,70 @@ BROWSER_UA = (
 )
 
 # ---------------------------------------------------------------------------
-# markitdown invocation
+# Internal / private target guard (SSRF protection)
 # ---------------------------------------------------------------------------
+# The converter should only fetch PUBLIC, external URLs. Refusing loopback,
+# private, link-local, carrier-grade-NAT and cloud-metadata addresses (plus
+# private hostnames) prevents the tool — and the headless browser it launches —
+# from being pointed at internal infrastructure (SSRF). This is the primary
+# hardening behind the review finding "[AST4]/[SQP-1]: lack of URL scoping".
+# Enabled by default; only an explicit --allow-internal overrides it for
+# trusted local development.
+_PRIVATE_HOST_SUFFIXES = (".local", ".internal", ".corp", ".lan", ".home", ".intranet")
+
+# Known sensitive public hosts we additionally refuse by default (defense in
+# depth — these are not private-range IPs but should never be auto-fetched).
+_BLOCKED_HOST_EXACT = frozenset({"localhost"})
+
+
+def _is_blocked_target(url, allow_internal=False):
+    """Return (blocked: bool, reason: str) for `url`.
+
+    Blocked when: scheme is not http/https; host is a private/internal hostname
+    (localhost, *.local, *.internal, ...); or the host is an IP literal in a
+    loopback / private / link-local / reserved / multicast range (covers
+    127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16
+    incl. cloud metadata 169.254.169.254, 100.64.0.0/10). Hostname-pattern
+    checks are the primary guard; DNS resolution is intentionally NOT performed
+    (resolution-based checks are bypassable via DNS rebinding and add latency).
+    """
+    if allow_internal:
+        return False, ""
+    if not url or not url.strip():
+        return True, "empty URL"
+    m = re.match(r"^([A-Za-z][A-Za-z0-9+.\-]*):", url.strip())
+    if not m or m.group(1).lower() not in ("http", "https"):
+        return True, "only http/https URLs are supported (scheme: %s)" % (m.group(1) if m else "none")
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    if not host:
+        return True, "missing host"
+    if host in _BLOCKED_HOST_EXACT or host.endswith(_PRIVATE_HOST_SUFFIXES):
+        return True, "private/internal hostname blocked: %s" % host
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False, ""  # not an IP literal; hostname allow/deny list already applied
+    # is_private covers 10/8, 172.16/12, 192.168/16, 169.254/16 (link-local
+    # also caught by is_link_local) and IPv6 ULA; 100.64.0.0/10 (CGNAT,
+    # shared address space) is NOT flagged by is_private, so check it explicitly.
+    if (ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip in ipaddress.ip_network("100.64.0.0/10")):
+        return True, "private/internal IP blocked: %s" % ip
+    return False, ""
+
+
+def _make_temp_html(prefix="mid_"):
+    """Create a secure temp .html file; caller must unlink it.
+
+    Replaces tempfile.mktemp (flagged by security scanners as predictable /
+    race-prone). NamedTemporaryFile(delete=False) returns an unguessable path
+    owned by the user; we close the handle and let the caller write + unlink.
+    """
+    tf = tempfile.NamedTemporaryFile(delete=False, suffix=".html", prefix=prefix)
+    tf.close()
+    return tf.name
+
+
 def markitdown_cmd():
     """Return a command prefix that runs markitdown via the current interpreter."""
     env_bin = os.environ.get("MARKITDOWN_BIN")
@@ -165,9 +229,14 @@ def find_browser():
     return None
 
 def render_with_browser(url, browser, virtual_time=8000):
-    html_path = tempfile.mktemp(suffix=".html")
+    html_path = _make_temp_html("mid_render_")
     try:
         with open(html_path, "w", encoding="utf-8", errors="ignore") as fh:
+            # --no-sandbox: required for headless Chromium to launch inside the
+            # managed/containerized Python environments this skill runs in
+            # (otherwise it crashes with "Running as root" / namespace errors).
+            # The SSRF guard above already refuses internal/loopback targets, so
+            # the browser is only ever pointed at public external URLs.
             subprocess.run(
                 [browser, "--headless=new", "--no-sandbox", "--disable-gpu",
                  f"--virtual-time-budget={virtual_time}", "--dump-dom", url],
@@ -431,7 +500,15 @@ def main():
     ap.add_argument("--force-browser", action="store_true", help="Always use browser render")
     ap.add_argument("--virtual-time-budget", type=int, default=8000,
                     help="Virtual time (ms) for SPA JS to run (default 8000)")
+    ap.add_argument("--allow-internal", action="store_true",
+                    help="Override the internal/loopback URL guard (trusted local dev only)")
     args = ap.parse_args()
+
+    # SSRF guard — refuse internal/private targets before any fetch/render.
+    blocked, reason = _is_blocked_target(args.url, args.allow_internal)
+    if blocked:
+        print("[blocked] refusing to fetch blocked target: %s" % reason, file=sys.stderr)
+        sys.exit(3)
 
     warn_media_backends(args.url)
 
@@ -447,7 +524,7 @@ def main():
             wx = extract_wechat_article(raw)
             if wx:
                 header_md, body_html = wx
-                tmp_body = tempfile.mktemp(suffix=".html")
+                tmp_body = _make_temp_html("mid_wx_")
                 with open(tmp_body, "w", encoding="utf-8", errors="ignore") as fh:
                     fh.write("<html><head><meta charset='utf-8'></head><body>"
                              + body_html + "</body></html>")
@@ -460,7 +537,7 @@ def main():
                 if accept_content(wx_md):
                     direct_md = wx_md
             if not direct_md:
-                tmp_html = tempfile.mktemp(suffix=".html")
+                tmp_html = _make_temp_html("mid_direct_")
                 with open(tmp_html, "w", encoding="utf-8", errors="ignore") as fh:
                     fh.write(raw)
                 res = run_markitdown_on_file(tmp_html)

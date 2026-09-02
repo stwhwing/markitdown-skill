@@ -273,6 +273,18 @@ async def convert_file(file: UploadFile):
 
 ---
 
+## 隐私与数据安全（使用可选外部能力前必读）
+
+下列能力在启用时会把内容发送到**外部服务**，使用前必须取得用户**明确同意**，且**不要**用于内部 / 私有 / 涉密文档：
+
+- **LLM 图像描述**（`MarkItDown(llm_client=..., llm_model=...)`）：图片会被发送至你配置的 OpenAI 兼容端点。
+- **LLM 文档分析 / 合同分析**（示例将 `result.text_content` 发给 `client.chat.completions.create`）：转换出的文本会发往外部 LLM。
+- **Azure Document Intelligence**（`docintel_endpoint=...`）：文档会发送至你的 Azure 端点（可能离开所在区域）。
+- **第三方插件**（`--use-plugins` / `enable_plugins=True`）：插件可能执行代码或访问被处理的内容，请只安装**可信来源**的插件。
+
+> 默认情况下这些全部关闭；纯本地转换（`MarkItDown()` 直连文件，或本技能的 `url_to_markdown.py`）**不联网、不上报**。涉及敏感内容时，优先仅做本地转换。
+> 另见：URL 转换器默认拒绝内网 / 私有地址（SSRF 防护），详见 SKILL.md「安全边界」一节。
+
 ## Performance Tips
 
 1. **Reuse MarkItDown instance** for batch processing

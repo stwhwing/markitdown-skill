@@ -3,7 +3,7 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (OCR), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.5.1
+version: 1.5.2
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
@@ -59,6 +59,17 @@ Documentation and utilities for converting documents to Markdown using Microsoft
    - 仍不推荐手写正则抽 `js_content`——交给 `markitdown` 处理即可，正则路径是脆弱的退化写法。
 
 > 一句话记忆：**链接 → `url_to_markdown.py`（已含微信 UA）→ Markdown → 分析**；微信仅在兜底时建议 `curl -A 完整UA` 抓 HTML 再交给 `markitdown`，手写正则不推荐。
+
+## ⚠️ 安全边界（务必遵守）
+
+本技能处理**用户显式提供**的文件与 URL。下列红线必须守住，既是平台审核要求，也关乎数据安全：
+
+1. **URL 转换器默认拒绝内网 / 私有目标（SSRF 防护）**：`scripts/url_to_markdown.py` 只转换**公开外部** URL。以下目标会被**直接拒绝**（退出码非 0，不发起任何请求）：
+   - 回环 / 私网 / 链路本地 / 保留地址：`localhost`、`.local` / `.internal` / `.corp` / `.lan` / `.home` / `.intranet` 等内网域名、`127.0.0.0/8`、`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`169.254.0.0/16`（含云元数据 `169.254.169.254`）、`100.64.0.0/10`；
+   - 非 `http/https` 协议（如 `file://`、`ftp://`）；
+   - 需要登录鉴权的私有页面、企业内部系统、含敏感内容的地址。
+   - 仅**受信任的本地开发**可用 `--allow-internal` 显式放行（默认关闭）。**不要**把内网 / 私有地址交给本技能。
+2. **可选外部 LLM / 云服务会传出内容**：OpenAI 图像描述、合同分析示例、Azure Document Intelligence、以及第三方插件（`--use-plugins`）在启用时，会把转换后的**文本 / 图片发送到对应外部端点**。这些均为**可选、默认关闭**能力，使用前必须取得用户**明确同意**，且**切勿**将内部 / 私有 / 涉密文档送入这些路径；敏感内容优先走纯本地的 `markitdown` 转换（不联网、不上报，详见下方与 `references/` 中的数据安全说明）。
 
 ## When to Use
 
