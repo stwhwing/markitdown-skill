@@ -1,14 +1,14 @@
 ---
 name: markitdown-skill
-description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (OCR), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
-description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
+description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (EXIF/LLM description), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
+description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片(EXIF/LLM 描述)/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.5.3
+version: 1.6.0
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
 displayName: MarkItDown
-summary: 文档与网页转 Markdown（PDF/Word/PPT/Excel/图片OCR/音频转写/HTML/YouTube/网页链接URL），并在总结/分析大文件或网页时主动转纯文本以省 Token。
+summary: 文档与网页转 Markdown（PDF/Word/PPT/Excel/图片(EXIF/LLM 描述)/音频转写/HTML/YouTube/网页链接URL），并在总结/分析大文件或网页时主动转纯文本以省 Token。
 license: MIT
 homepage: https://github.com/microsoft/markitdown
 allowed-tools: Read,Write,Bash,Glob
@@ -71,6 +71,28 @@ Documentation and utilities for converting documents to Markdown using Microsoft
    - 仅**受信任的本地开发**可用 `--allow-internal` 显式放行（默认关闭）。**不要**把内网 / 私有地址交给本技能。
 2. **可选外部 LLM / 云服务会传出内容**：OpenAI 图像描述、合同分析示例、Azure Document Intelligence、以及第三方插件（`--use-plugins`）在启用时，会把转换后的**文本 / 图片发送到对应外部端点**。这些均为**可选、默认关闭**能力，使用前必须取得用户**明确同意**，且**切勿**将内部 / 私有 / 涉密文档送入这些路径；敏感内容优先走纯本地的 `markitdown` 转换（不联网、不上报，详见下方与 `references/` 中的数据安全说明）。
 
+## 🔒 隐私与数据流向（处理敏感内容先看这里）
+
+**一句话决策：文档 / 网页 → Markdown 的默认路径全程在本机完成，不联网、不上报；只有显式启用的可选外部能力才会把内容发出去。**
+
+| 你要做的事 | 内容是否离开本机 | 敏感 / 涉密文档可用？ |
+|---|---|---|
+| `markitdown <本地文件>` | 否 | ✅ 可用 |
+| `scripts/url_to_markdown.py "<url>"` | 否（仅请求该 URL 本身） | ✅ 可用（限公开 URL；内网 / 私有地址默认拒绝，见上节） |
+| `scripts/batch_convert.py` | 否 | ✅ 可用 |
+| `scripts/token_saver.py` / `measure_tokens.py` | 否（本地估算，公开版无任何上报组件） | ✅ 可用 |
+| LLM 图像描述 / 文档分析（`llm_client=`） | **是** → 你配置的兼容端点 | ❌ 须先取得明确同意 |
+| Azure Document Intelligence | **是** → 你的 Azure 端点（可能离开所在区域） | ❌ 同上 |
+| 第三方插件（`--use-plugins`） | 取决于插件 | ❌ 仅可信来源插件 |
+
+**三条硬规则：**
+
+1. 上表前 4 行（默认路径）即可覆盖绝大多数场景，**不需要**任何外部能力。
+2. 确需外部能力时，必须先说明「哪部分内容发往哪里」并取得用户**明确同意**；未获同意则降级为纯本地转换。
+3. 内网 / 私有 / 需登录的地址一律不转（SSRF 防护，见上节）。
+
+> 明细见 [USAGE-GUIDE.md §隐私与数据安全](references/USAGE-GUIDE.md) 与 [reference.md §数据安全提示](references/reference.md)。
+
 ## When to Use
 
 **Use markitdown for:**
@@ -78,7 +100,7 @@ Documentation and utilities for converting documents to Markdown using Microsoft
 - 🌐 Converting web pages to markdown
 - 📝 Document analysis (PDFs, Word, PowerPoint)
 - 🎬 YouTube transcripts
-- 🖼️ Image text extraction (OCR)
+- 🖼️ Image metadata & text (EXIF / LLM description)
 - 🎤 Audio transcription
 
 ## Quick Start
@@ -99,7 +121,7 @@ markitdown https://example.com/docs -o docs.md
 | Word (.docx) | Headings, lists, tables |
 | PowerPoint | Slides, text |
 | Excel | Tables, sheets |
-| Images | OCR + EXIF metadata |
+| Images | EXIF metadata (exiftool, optional) + LLM description (optional) |
 | Audio | Speech transcription |
 | HTML | Structure preservation |
 | YouTube | Video transcription |
@@ -109,13 +131,38 @@ markitdown https://example.com/docs -o docs.md
 The skill requires Microsoft's `markitdown` CLI:
 
 ```bash
+# 全量：含音频 / YouTube 转写等全部可选能力（体积最大）
 pip install 'markitdown[all]'
+
+# 常用最小子集：PDF / Word / PPT / Excel（体积更小、安装更快、依赖更少）
+pip install 'markitdown[pdf,docx,pptx,xlsx]'
 ```
 
-Or install specific formats only:
+### ✅ 环境自检（首次使用建议跑一次）
+
 ```bash
-pip install 'markitdown[pdf,docx,pptx]'
+markitdown --version           # 期望输出：markitdown 0.1.7 之类
+python -m markitdown --version # 上一条 command not found 时用这条
 ```
+
+**用哪个 Python 跑本技能的脚本**：必须是**装了 `markitdown` 的那一个**解释器，不要用系统 python（通常没有 markitdown，会 `ModuleNotFoundError`）。
+
+- WorkBuddy：Windows 用 `~/.workbuddy/binaries/python/envs/default/Scripts/python.exe`，macOS / Linux 用受管 `python3`；
+- 其他环境：哪个 Python 能跑通 `python -m markitdown --version`，就用它。
+
+## 🧩 可选能力与前置条件
+
+核心转换（PDF / Word / PPT / Excel / HTML / 文本类）装完 `markitdown` 即可用。下列**高级 / 可选**能力需要额外依赖或凭据；缺依赖时**不会静默丢内容**——除 EXIF 与 LLM 描述是跳过外，其余会抛出 `MissingDependencyException` 明确提示缺什么。
+
+| 能力 | 需要的额外条件 | 缺失时的表现 |
+|---|---|---|
+| 图片 EXIF 元数据 | 外部二进制 `exiftool`（可选） | 静默跳过元数据，不影响其他格式 |
+| 图片文字识别 | 见「图片转不出文字」：**不是**装 tesseract，而是配多模态 LLM 或 Azure DI | 只输出元数据 / 无正文 |
+| 音频 / 视频转写 | `pip install 'markitdown[audio-transcription]'` **＋ 系统二进制 ffmpeg**（`pydub` 依赖，常漏装） | 抛 `MissingDependencyException`；装 ffmpeg 后恢复 |
+| YouTube 字幕 | `pip install 'markitdown[youtube-transcription]'`（**不需要** ffmpeg） | 无字幕则无输出 |
+| Azure 文档智能 | `markitdown[az-doc-intel]` + endpoint / 凭据 | 回退普通 PDF 解析 |
+| LLM 图像描述 / 文档分析 | `OPENAI_API_KEY`（或兼容端点）**＋ 用户明确同意** | 默认关闭，不配置即不触发 |
+| SPA / JS 渲染页面 | Windows / macOS：本机 Chrome 或 Edge（`--dump-dom`，零新依赖）；Linux：`chromium` 或 `playwright install chromium` | 退化为内嵌 JSON 抽取，再退化为提示改用 WebFetch |
 
 ## Common Patterns
 
@@ -229,14 +276,14 @@ Linux 服务器需先装 chromium（或 `playwright install chromium`），同�
 pip install 'markitdown[all]'
 ```
 
-### OCR Not Working
-```bash
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr
+### 图片转不出文字（不是 OCR 工具没装）
 
-# macOS
-brew install tesseract
-```
+markitdown **本体不做本地 OCR**（0.1.7 依赖树中没有 tesseract）。图片里的文字只能走以下两条路：
+
+1. **多模态 LLM 图像描述**（推荐）：配置 `llm_client` / `llm_model` 后由 LLM 读图描述内容，见 `references/reference.md`；
+2. **Azure Document Intelligence**：服务端 OCR，适合复杂版式 PDF / 图片，需 endpoint + 凭据。
+
+只有缺 EXIF 元数据时才需要系统安装 `exiftool`（可选，非必需）。
 
 ### SPA 页面抓到空内容
 页面是 JS 渲染的 SPA，`markitdown` 直连只能拿到空壳。改用 `scripts/url_to_markdown.py`，它会自动用本机

@@ -36,7 +36,7 @@ typically **80%+ fewer tokens** for the same analytical task.
 
 ## Where the big savings actually come from
 
-- **PDF (especially scanned / complex layouts) and images (OCR):** the alternative to
+- **PDF (especially scanned / complex layouts) and images (image input):** the alternative to
   Markdown is feeding the model the full layout, fonts, or a multimodal image — often
   5–10× the tokens of the cleaned text. This is the article's hero case (~80%+).
 - **DOCX / PPTX / XLSX:** the model can't read the binary directly; Markdown is the

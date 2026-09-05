@@ -165,12 +165,16 @@ Output format:
 | Data 1   | Data 2   | Data 3   |
 ```
 
-### Images (OCR)
+### Images (metadata / LLM description)
 
 ```bash
-# Requires Tesseract OCR
-markitdown scanned-document.jpg -o extracted.md
+# 默认只输出 EXIF 元数据；需系统装 exiftool（可选）
+markitdown photo.jpg -o photo.md
 ```
+
+> 图片里的**文字** markitdown 本体读不出来：0.1.7 **不做本地 OCR**，依赖树里没有 tesseract，
+> 装 tesseract 也不会生效。要读图取字请二选一：① 配置多模态 LLM 做图像描述；
+> ② 用 Azure Document Intelligence 做服务端 OCR。详见 SKILL.md「图片转不出文字（不是 OCR 工具没装）」。
 
 ### Audio Transcription
 
@@ -288,7 +292,7 @@ async def convert_file(file: UploadFile):
 ## Performance Tips
 
 1. **Reuse MarkItDown instance** for batch processing
-2. **Reduce image resolution** if OCR speed matters
+2. **Reduce image resolution** if LLM image-description speed matters
 3. **Use Azure Document Intelligence** for complex PDF layouts
 4. **Audio transcription** is roughly real-time
 

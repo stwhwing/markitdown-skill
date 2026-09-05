@@ -155,9 +155,9 @@ markitdown <file> -d -e <endpoint>  # Azure Doc Intelligence
 - **Dependencies:** `pip install 'markitdown[xlsx]'` or `'markitdown[xls]'`
 
 ### Images (jpg, png, etc.)
-- **Extracts:** EXIF metadata + OCR text
-- **Requires:** Tesseract OCR system dependency
-- **Enhanced with:** LLM descriptions
+- **Extracts:** EXIF metadata (needs system `exiftool`, optional) + optional LLM description
+- **Requires:** nothing extra by default. markitdown 0.1.7 **does not do local OCR** (no tesseract dependency) — to read text in images configure a multimodal LLM client, or use Azure Document Intelligence (server-side OCR)
+- **Enhanced with:** LLM descriptions (`llm_client` / `llm_model`)
 
 ### Audio (wav, mp3)
 - **Extracts:** EXIF metadata + speech transcription
@@ -209,20 +209,32 @@ conda activate markitdown
 
 ### System Dependencies
 
-**Tesseract OCR** (for image text extraction):
+**`exiftool`** (optional, for image EXIF metadata):
 ```bash
 # Ubuntu/Debian
-sudo apt-get install tesseract-ocr
+sudo apt-get install libimage-exiftool-perl
 
 # macOS
-brew install tesseract
-
-# Windows
-# Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
+brew install exiftool
 ```
 
+**`ffmpeg`** (required for audio/video transcription — `pydub` dependency, frequently missed):
+```bash
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows: download from https://ffmpeg.org/download.html and add to PATH
+```
+
+> **No Tesseract needed.** markitdown does not perform local OCR; older guides telling you to
+> `apt install tesseract-ocr` do not apply and will not enable image text extraction.
+
 **Audio libraries** (for audio transcription):
-- Platform-specific dependencies for speech_recognition library
+- `speech_recognition` via `pip install 'markitdown[audio-transcription]'`
+- Plus the `ffmpeg` binary above
 - Check: https://github.com/Uberi/speech_recognition
 
 ## Azure Document Intelligence
@@ -305,7 +317,7 @@ except Exception as e:
 
 1. **Batch processing:** Reuse MarkItDown instance
 2. **Large files:** Consider chunking or streaming
-3. **OCR:** Reduce image resolution if speed matters
+3. **Images:** Reduce resolution to speed up LLM image description
 4. **Audio:** Expect real-time or slower transcription
 5. **Azure Doc Intel:** Best for complex PDFs, costs apply
 
