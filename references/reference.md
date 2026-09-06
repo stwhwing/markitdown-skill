@@ -377,15 +377,17 @@ async def convert_file(file: UploadFile):
     return {"markdown": result.text_content}
 ```
 
-## 数据安全提示（可选外部能力）
+## 数据安全提示（API 参数索引）
 
-`llm_client` / `llm_model`（OpenAI 兼容图像描述与文档分析）、`docintel_endpoint`（Azure Document Intelligence）、`enable_plugins=True`（第三方插件）在启用时会将内容发往**外部端点**或允许代码执行：
+会向外部端点传出内容的 API 参数一览（**均默认关闭**）：
 
-- 这些能力**默认关闭**，启用前须取得用户**明确同意**；
-- **切勿**将内部 / 私有 / 涉密文档送入上述路径；
-- 仅 `MarkItDown()` 直连文件的本地转换**不联网、不上报**。
+| 参数 | 对应能力 | 数据流向 |
+|---|---|---|
+| `llm_client` / `llm_model` | OpenAI 兼容图像描述、文档分析 | 你配置的兼容端点 |
+| `docintel_endpoint` | Azure Document Intelligence | 你的 Azure 端点 |
+| `enable_plugins=True` | 第三方插件 | 取决于插件实现 |
 
-> 另见 USAGE-GUIDE.md「隐私与数据安全」一节与 SKILL.md「安全边界」一节（URL 转换器默认拒绝内网 / 私有地址，SSRF 防护）。
+> **启用规则与决策表不在此重复**：决策依据见 **SKILL.md §🔒 隐私与数据流向**，各能力的具体参数与代码见 **USAGE-GUIDE.md §隐私与数据安全**；SSRF 防护见 SKILL.md「⚠️ 安全边界」。
 
 ## Breaking Changes (v0.0.1 → v0.1.0)
 

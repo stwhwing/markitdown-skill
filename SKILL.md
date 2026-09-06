@@ -3,7 +3,7 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (EXIF/LLM description), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片(EXIF/LLM 描述)/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.6.0
+version: 1.7.0
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
@@ -69,7 +69,7 @@ Documentation and utilities for converting documents to Markdown using Microsoft
    - 非 `http/https` 协议（如 `file://`、`ftp://`）；
    - 需要登录鉴权的私有页面、企业内部系统、含敏感内容的地址。
    - 仅**受信任的本地开发**可用 `--allow-internal` 显式放行（默认关闭）。**不要**把内网 / 私有地址交给本技能。
-2. **可选外部 LLM / 云服务会传出内容**：OpenAI 图像描述、合同分析示例、Azure Document Intelligence、以及第三方插件（`--use-plugins`）在启用时，会把转换后的**文本 / 图片发送到对应外部端点**。这些均为**可选、默认关闭**能力，使用前必须取得用户**明确同意**，且**切勿**将内部 / 私有 / 涉密文档送入这些路径；敏感内容优先走纯本地的 `markitdown` 转换（不联网、不上报，详见下方与 `references/` 中的数据安全说明）。
+2. **可选外部 LLM / 云服务会传出内容**：图像描述、文档分析、Azure Document Intelligence 与第三方插件在启用时会把内容发往外部端点。**默认关闭**，启用前须取得用户**明确同意**，涉密文档一律不走这些路径。→ 完整清单与逐项决策见下方「🔒 隐私与数据流向」。
 
 ## 🔒 隐私与数据流向（处理敏感内容先看这里）
 
@@ -91,7 +91,7 @@ Documentation and utilities for converting documents to Markdown using Microsoft
 2. 确需外部能力时，必须先说明「哪部分内容发往哪里」并取得用户**明确同意**；未获同意则降级为纯本地转换。
 3. 内网 / 私有 / 需登录的地址一律不转（SSRF 防护，见上节）。
 
-> 明细见 [USAGE-GUIDE.md §隐私与数据安全](references/USAGE-GUIDE.md) 与 [reference.md §数据安全提示](references/reference.md)。
+> 隐私内容**只在此处完整展开一次**，其余文件各司其职，不重复陈述：**本节**＝决策依据（该不该用某个外部能力）；[USAGE-GUIDE.md §隐私与数据安全](references/USAGE-GUIDE.md)＝各外部能力的**具体参数与代码**；[reference.md §数据安全提示](references/reference.md)＝API 参数索引。
 
 ## When to Use
 
@@ -296,7 +296,8 @@ Chrome/Edge 无头渲染回退；服务器侧需先装 chromium（或 `playwrigh
 | `markitdown` CLI | Microsoft's pip package |
 | `markitdown` Python API | Microsoft's pip package |
 | `scripts/batch_convert.py` | This skill (utility) |
-| `scripts/url_to_markdown.py` | This skill (SPA fallback utility for web pages) |
+| `scripts/url_to_markdown.py` | This skill (SPA fallback utility for web pages) — **entry point** |
+| `scripts/url_security.py`<br>`scripts/url_fetch.py`<br>`scripts/content_detect.py`<br>`scripts/spa_extract.py`<br>`scripts/media_detect.py` | This skill — modules used by `url_to_markdown.py`; **keep them in the same directory**. (v1.7.0 split the former 600-line single script into these units; behaviour is unchanged.) |
 | `scripts/token_saver.py` | This skill (OPTIONAL local token-cost/saving estimator) |
 | `scripts/measure_tokens.py` | This skill (OPTIONAL token measurement / compare tool for any text) |
 | Documentation | This skill |
