@@ -4,11 +4,12 @@ A reusable agent skill that converts **documents and web pages** to Markdown usi
 [Microsoft's MarkItDown](https://github.com/microsoft/markitdown), with two practical
 additions:
 
-1. **`url_to_markdown.py`** — a web-page converter that defeats JS-rendered SPA shells
-   and anti-bot challenges (notably WeChat / `mp.weixin.qq.com`) that otherwise return
-   empty pages. It fetches with a full browser User-Agent, falls back to headless
-   Chrome/Edge `--dump-dom` rendering, then to embedded-JSON extraction, so you reliably
-   get clean Markdown instead of a blank `<div id="root">`.
+1. **Web page → Markdown pipeline** (`scripts/url_to_markdown.py` orchestrating five
+   focused modules) — defeats JS-rendered SPA shells and anti-bot challenges (notably
+   WeChat / `mp.weixin.qq.com`) that otherwise return empty pages. It fetches with a
+   full browser User-Agent, falls back to headless Chrome/Edge `--dump-dom` rendering,
+   then to embedded-JSON extraction, so you reliably get clean Markdown instead of a
+   blank `<div id="root">`.
 2. **`token_saver.py`** — a local estimator that shows how many tokens you *actually* pay
    when you feed the AI the cleaned Markdown instead of the raw file (and an honest
    saving % only when a real baseline exists).
@@ -17,18 +18,29 @@ The core idea: **convert first, then analyse.** Richly-formatted docs (PDF/PPTX/
 scanned images) carry huge layout/noise overhead; converting to plain Markdown typically
 cuts AI token cost by 80%+.
 
+> Version note: the skill version lives **only** in the `SKILL.md` frontmatter
+> (`version:`); this README intentionally carries no version number so it cannot go
+> stale. Since v1.7.0 the web converter is split into the modules listed below —
+> `url_to_markdown.py` itself is a thin CLI orchestrator.
+
 ## What's inside
 
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | Skill manifest + usage instructions (used by WorkBuddy / ClawBot-style agents) |
-| `scripts/url_to_markdown.py` | Web URL → Markdown with SPA + anti-bot fallback |
+| `scripts/url_to_markdown.py` | Web URL → Markdown — CLI orchestrator wiring the modules below |
+| `scripts/url_security.py` | SSRF guard: target validation, internal/private address blocking |
+| `scripts/url_fetch.py` | HTTP fetching with full browser User-Agent |
+| `scripts/content_detect.py` | Content-type / SPA-shell / anti-bot page detection |
+| `scripts/spa_extract.py` | Headless-browser rendering fallback + embedded-JSON extraction |
+| `scripts/media_detect.py` | Media/link handling within pages |
 | `scripts/token_saver.py` | Local token-cost / saving estimator |
 | `scripts/measure_tokens.py` | Token counter / cost measurement for any text |
 | `scripts/batch_convert.py` | Batch file → Markdown helper |
 | `references/reference.md` | MarkItDown API reference |
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |
 | `references/TOKEN-SAVER.md` | Token-saving methodology & honesty notes |
+| `references/TOKEN-AUDIT.md` | Token audit methodology (optional component) |
 
 ## Requirements
 
