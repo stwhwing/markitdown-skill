@@ -80,6 +80,10 @@ files and links to Markdown before analysing them, and will route every web link
   (`169.254.169.254`), or internal hostnames (`*.local`, `*.internal`, `*.corp`, `*.lan`,
   `*.home`, `*.intranet`). Pass `--allow-internal` only on a trusted machine when you
   deliberately need to fetch a local/intranet page.
+- **Sandbox-first headless rendering.** The SPA fallback launches the browser with
+  Chromium's sandbox enabled by default; `--no-sandbox` is only used automatically
+  when running as root or when the sandboxed launch crashes in restricted containers
+  (a notice is printed to stderr when that happens).
 - **Optional external capabilities are off by default.** The skill can optionally use
   OpenAI image descriptions, Azure Document Intelligence, or third-party plugins, but these
   are disabled unless you explicitly enable them and they require your consent. Never feed

@@ -80,6 +80,15 @@ def main():
     md_kwargs = {"enable_plugins": args.plugins}
     
     if args.llm_model:
+        print(
+            "[consent notice] --llm-model is enabled: document content and "
+            "embedded images WILL BE SENT to the configured OpenAI-compatible "
+            "endpoint for image descriptions. Do not use it on private or "
+            "sensitive documents unless you explicitly accept this data flow. "
+            "(This feature is off by default; see SKILL.md '隐私与数据流向' / "
+            "'Security' for the full data-handling policy.)",
+            file=sys.stderr,
+        )
         try:
             from openai import OpenAI
             client = OpenAI()

@@ -63,19 +63,38 @@ def find_browser():
 
 def render_with_browser(url, browser, virtual_time=8000):
     html_path = _make_temp_html("mid_render_")
+    # Sandbox-first strategy: keep Chromium's sandbox enabled whenever possible.
+    # --no-sandbox is only used when it is actually required (running as root) or
+    # when the sandboxed launch crashed with the typical namespace error seen in
+    # restricted containerized environments. The SSRF guard already refuses
+    # internal/loopback targets, so the browser is only pointed at public URLs.
+    base = [browser, "--headless=new", "--disable-gpu",
+            f"--virtual-time-budget={virtual_time}", "--dump-dom", url]
+    is_root = hasattr(os, "getuid") and os.getuid() == 0
+    if is_root:
+        attempts = [base + ["--no-sandbox"]]
+    else:
+        attempts = [base, base + ["--no-sandbox"]]
+    last_err = None
     try:
-        with open(html_path, "w", encoding="utf-8", errors="ignore") as fh:
-            # --no-sandbox: required for headless Chromium to launch inside the
-            # managed/containerized Python environments this skill runs in
-            # (otherwise it crashes with "Running as root" / namespace errors).
-            # The SSRF guard above already refuses internal/loopback targets, so
-            # the browser is only ever pointed at public external URLs.
-            subprocess.run(
-                [browser, "--headless=new", "--no-sandbox", "--disable-gpu",
-                 f"--virtual-time-budget={virtual_time}", "--dump-dom", url],
-                stdout=fh, stderr=subprocess.DEVNULL, timeout=90, check=True,
-            )
-        return html_path
+        for i, cmd in enumerate(attempts):
+            try:
+                with open(html_path, "w", encoding="utf-8", errors="ignore") as fh:
+                    subprocess.run(
+                        cmd, stdout=fh, stderr=subprocess.DEVNULL, timeout=90,
+                        check=True,
+                    )
+                if i > 0:
+                    print("[spa-fallback] sandboxed launch failed; retried with "
+                          "--no-sandbox (browser sandbox disabled)", file=sys.stderr)
+                return html_path
+            except FileNotFoundError:
+                raise  # browser binary missing; retrying cannot help
+            except subprocess.TimeoutExpired:
+                raise  # page too slow; retrying with --no-sandbox cannot help
+            except subprocess.CalledProcessError as e:
+                last_err = e  # typical root/namespace crash -> retry sandboxless
+        raise last_err
     except Exception as e:  # noqa: BLE001
         if os.path.exists(html_path):
             try:

@@ -3,7 +3,7 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (EXIF/LLM description), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片(EXIF/LLM 描述)/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.7.1
+version: 1.7.2
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
@@ -161,7 +161,7 @@ python -m markitdown --version # 上一条 command not found 时用这条
 | 音频 / 视频转写 | `pip install 'markitdown[audio-transcription]'` **＋ 系统二进制 ffmpeg**（`pydub` 依赖，常漏装） | 抛 `MissingDependencyException`；装 ffmpeg 后恢复 |
 | YouTube 字幕 | `pip install 'markitdown[youtube-transcription]'`（**不需要** ffmpeg） | 无字幕则无输出 |
 | Azure 文档智能 | `markitdown[az-doc-intel]` + endpoint / 凭据 | 回退普通 PDF 解析 |
-| LLM 图像描述 / 文档分析 | `OPENAI_API_KEY`（或兼容端点）**＋ 用户明确同意** | 默认关闭，不配置即不触发 |
+| LLM 图像描述 / 文档分析 | `OPENAI_API_KEY`（或兼容端点）**＋ 用户明确同意** | 默认关闭，不配置即不触发；启用时脚本会先向 stderr 打印数据流出提示 |
 | SPA / JS 渲染页面 | Windows / macOS：本机 Chrome 或 Edge（`--dump-dom`，零新依赖）；Linux：`chromium` 或 `playwright install chromium` | 退化为内嵌 JSON 抽取，再退化为提示改用 WebFetch |
 
 ## Common Patterns
@@ -262,7 +262,7 @@ print(result.text_content)
 python "<skill-dir>/scripts/url_to_markdown.py" "https://..." -o page.md
 ```
 
-回退优先级：① 本机 Chrome/Edge 无头 `--dump-dom`（已执行 JS 再序列化 DOM，Windows 已验证，零新依赖）；
+回退优先级：① 本机 Chrome/Edge 无头 `--dump-dom`（已执行 JS 再序列化 DOM，Windows 已验证，零新依赖；**默认启用 Chromium 沙箱**，仅 root 或受限容器崩溃时自动回退 `--no-sandbox` 并提示）；
 ② 无浏览器时抽取页面内嵌 JSON（`__NEXT_DATA__` / `window.__INITIAL_STATE__` / `<script type="application/json">`），并**递归平铺抽取**只保留正文类字段（不再把整个 10–20KB 的 `__NEXT_DATA__` 原样灌入上下文）；
 ③ 都不可用再提示改用 WebFetch（服务端渲染兜底）。
 
