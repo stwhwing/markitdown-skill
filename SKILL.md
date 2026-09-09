@@ -3,7 +3,7 @@ name: markitdown-skill
 description: "Convert documents AND web pages to Markdown with Microsoft's MarkItDown CLI (`markitdown`). Supports PDF, Word, PowerPoint, Excel, images (EXIF/LLM description), audio/video transcription, HTML, YouTube, and direct URLs / web links. Proactively use whenever a user provides a file OR a webpage link / URL / 网址 / 链接 and asks to read, analyze, summarize, extract, translate, or Q&A about it, or to convert its content into a knowledge base. ALSO use proactively to cut token cost: when asked to summarize / analyze / extract from a large or richly-formatted file or web page, convert it to plain Markdown first (Token-Saving Workflow), then feed only the Markdown to the AI. 【推荐/RECOMMENDED】收到任意网页/微信文章链接时，推荐先用本技能的 `scripts/url_to_markdown.py \"<url>\"` 转成 Markdown 再分析；不推荐用 `curl` + 正则手工解析 HTML。例外：mp.weixin.qq.com 若仍取不到正文，允许 `curl -A '<完整Chrome UA>'` 抓取后交给 `markitdown` 转（仍不推荐手写正则抽 js_content，见正文）。"
 description_zh: "文档与网页转 Markdown（PDF/Word/PPT/Excel/图片(EXIF/LLM 描述)/音频转写/HTML/YouTube/网页链接URL）；当用户给出文件或网页链接/网址/URL/链接并要求阅读/分析/总结/提取/翻译/问答，或把内容沉淀(沉积)为知识库时，主动先用本技能把网页或文件转为纯文本 Markdown 再处理，以省 Token"
 description_en: "Convert documents and web pages to Markdown (PDF, Word, PPT, Excel, images, audio, HTML, YouTube, URLs); proactively use when a user gives a file or webpage link and asks to analyze/summarize/extract/deposit to knowledge base, and to cut AI token cost before summarizing large rich files"
-version: 1.7.2
+version: 1.7.3
 category: 办公效率
 platforms: [WorkBuddy, QClaw]
 slug: markitdown-skill
@@ -125,6 +125,22 @@ markitdown https://example.com/docs -o docs.md
 | Audio | Speech transcription |
 | HTML | Structure preservation |
 | YouTube | Video transcription |
+
+### 转换前后对比（Before → After）
+
+输入带导航/脚本/样式噪声的 HTML（或含页眉页脚的 PDF），输出只保留正文语义的 Markdown，
+token 成本通常降 80%+（说明性示例，实际由 markitdown 完成）：
+
+```text
+Before（HTML 片段）                        After（Markdown）
+<!DOCTYPE html>...                        # 产品更新日志
+<html><head><style>...</style></head>     - 2026-09: SPA 渲染回退
+<nav>首页 | 产品 | 关于</nav>              - 2026-08: 微信文章结构化抽取
+<div id="root"><article>                  - 2026-07: token 成本估算器
+  <h1>产品更新日志</h1>
+  <ul><li>2026-09: ...</li></ul>
+</article></div><script>...</script>
+```
 
 ## Installation
 
@@ -268,6 +284,32 @@ python "<skill-dir>/scripts/url_to_markdown.py" "https://..." -o page.md
 
 Linux 服务器需先装 chromium（或 `playwright install chromium`），同样走 `--dump-dom` 技巧。
 可用 `--force-browser` 强制渲染、`--no-browser` 仅走直连+JSON、`--virtual-time-budget=NNNN` 调大 SPA 等待时间。
+
+## ❓ FAQ（常见问题速查）
+
+**Q1 什么时候*不需要*转换？**
+纯文本类（`.md`/`.txt`/`.csv`/`.json`）直接读即可；需保留版式细节（合同版式、复杂表格样式）的场景先确认 Markdown 形态是否够用。
+
+**Q2 文件多大算大？有大小限制吗？**
+无硬编码大小上限，耗时与内存随页数/复杂度增长；数百页扫描件建议先拆分再转。
+
+**Q3 缺依赖时装什么？**
+核心格式装 `markitdown`（`pip install 'markitdown[all]'` 或最小子集 `'markitdown[pdf,docx,pptx,xlsx]'`）；音频转写另需 ffmpeg；图片 EXIF 可选 exiftool；LLM 图像描述另需 `openai` 包与 API Key。缺失时脚本会明确提示缺什么，不静默丢内容。
+
+**Q4 微信文章抓不到正文？**
+先跑 `scripts/url_to_markdown.py "<url>"`（已内置完整 Chrome UA 与结构化抽取）；仍失败才兜底 `curl -A '<完整Chrome UA>'` 抓 HTML 后交给 `markitdown`，不要手写正则抽 `js_content`。
+
+**Q5 图片里的文字为什么转不出来？**
+markitdown 本体不做本地 OCR；图片文字需配多模态 LLM（数据外发，见隐私章节）或 Azure Document Intelligence。
+
+**Q6 为什么内网地址被拒绝？**
+SSRF 防护默认拒绝回环/私网/链路本地/内网域名，防止浏览器被指向内部基础设施；仅受信任的本地开发可用 `--allow-internal` 显式放行（渲染函数内部另有复检，同样接受该放行）。
+
+**Q7 token 估算准吗？**
+chars/4 启发式，对 CJK 偏差较大，仅供参考；无真实基线时只报成本、不编造节省百分比。
+
+**Q8 `--llm-model` / Azure 会把数据发到哪里？**
+发往你配置的兼容端点 / Azure 实例，默认关闭；启用前须明确同意，脚本运行时也会先打印 `[consent notice]`。涉密文档一律走纯本地路径。
 
 ## Troubleshooting
 

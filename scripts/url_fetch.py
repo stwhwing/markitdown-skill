@@ -61,7 +61,20 @@ def find_browser():
     return None
 
 
-def render_with_browser(url, browser, virtual_time=8000):
+def render_with_browser(url, browser, virtual_time=8000, allow_internal=False):
+    # Defense-in-depth: re-verify the target INSIDE this function so the browser
+    # is never launched for an internal/private URL even if an upstream guard
+    # were skipped. --allow-internal (trusted local dev) still overrides.
+    try:
+        from url_security import _is_blocked_target
+    except ImportError:  # used standalone without the package; upstream guard applies
+        _is_blocked_target = None
+    if _is_blocked_target is not None:
+        blocked, reason = _is_blocked_target(url, allow_internal)
+        if blocked:
+            print("[spa-fallback] in-function SSRF re-check refused target: %s" % reason,
+                  file=sys.stderr)
+            return None
     html_path = _make_temp_html("mid_render_")
     # Sandbox-first strategy: keep Chromium's sandbox enabled whenever possible.
     # --no-sandbox is only used when it is actually required (running as root) or

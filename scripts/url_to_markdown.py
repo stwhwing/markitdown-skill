@@ -126,7 +126,7 @@ def main():
     browser = None if args.no_browser else find_browser()
     fallback_md = ""
     if browser:
-        html = render_with_browser(args.url, browser, args.virtual_time_budget)
+        html = render_with_browser(args.url, browser, args.virtual_time_budget, allow_internal=args.allow_internal)
         if html:
             res = run_markitdown_on_file(html)
             md = res.stdout or ""
