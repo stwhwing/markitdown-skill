@@ -51,7 +51,7 @@ from spa_extract import (extract_embedded_json, extract_wechat_article,         
                          json_to_markdown)
 from url_fetch import (_make_temp_html, fetch_html, find_browser,               # noqa: E402
                        render_with_browser, run_markitdown_on_file)
-from url_security import _is_blocked_target                                     # noqa: E402
+from url_security import _is_blocked_target, resolve_and_check                                     # noqa: E402
 
 
 def emit(md, out):
@@ -80,6 +80,15 @@ def main():
         print("[blocked] refusing to fetch blocked target: %s" % reason, file=sys.stderr)
         sys.exit(3)
 
+    # DNS-level re-validation (best effort — see url_security.resolve_and_check
+    # for its TOCTOU caveat; it complements the redirect and in-function checks).
+    import urllib.parse as _up
+    _host = _up.urlparse(args.url).hostname or ""
+    blocked_dns, reason_dns = resolve_and_check(_host, args.allow_internal)
+    if blocked_dns:
+        print("[blocked] refusing to fetch target: %s" % reason_dns, file=sys.stderr)
+        sys.exit(3)
+
     warn_media_backends(args.url)
 
     # 1) fetch with browser UA, then convert the fetched HTML file via markitdown.
@@ -88,7 +97,7 @@ def main():
     direct_md = ""
     if not args.force_browser:
         try:
-            raw = fetch_html(args.url)
+            raw = fetch_html(args.url, allow_internal=args.allow_internal)
             # WeChat articles: extract title / account / publish time plus the
             # #js_content body directly, instead of the whole ~3 MB shell.
             wx = extract_wechat_article(raw)

@@ -22,8 +22,9 @@ if _HERE not in sys.path:
 from content_detect import meaningful_len  # noqa: E402
 
 try:
-    from url_fetch import BROWSER_UA
+    from url_fetch import BROWSER_UA, safe_urlopen
 except Exception:  # pragma: no cover - url_fetch always present in the package
+    safe_urlopen = None
     BROWSER_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -31,9 +32,22 @@ except Exception:  # pragma: no cover - url_fetch always present in the package
 
 
 def extract_embedded_json(url):
+    # Defense-in-depth: this module can be called directly, so re-verify the
+    # target here instead of trusting the caller (--allow-internal still wins).
+    try:
+        from url_security import _is_blocked_target
+    except ImportError:  # pragma: no cover - url_security always present
+        _is_blocked_target = None
+    if _is_blocked_target is not None:
+        blocked, reason = _is_blocked_target(url)
+        if blocked:
+            print("[spa-fallback] in-function SSRF re-check refused target: %s"
+                  % reason, file=sys.stderr)
+            return None
     try:
         req = urllib.request.Request(url, headers={"User-Agent": BROWSER_UA})
-        raw = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
+        opener = safe_urlopen if safe_urlopen else urllib.request.urlopen
+        raw = opener(req, timeout=30).read().decode("utf-8", "ignore")
     except Exception as e:  # noqa: BLE001
         print(f"[spa-fallback] fetch failed: {e}", file=sys.stderr)
         return None

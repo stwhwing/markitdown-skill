@@ -90,6 +90,15 @@ files and links to Markdown before analysing them, and will route every web link
   private documents to an external service; local `markitdown` conversion does not phone
   home.
 
+## Feedback
+
+问题、建议与 bug 反馈请走这两个入口：
+
+- **GitHub Issues**：<https://github.com/stwhwing/markitdown-skill/issues>
+- **技能页**：skillhub.cn / ClawHub 上的 MarkItDown 技能页（评论与评分）
+
+文档与代码同源于本仓库；技能的三平台发布版本（GitHub / skillhub.cn / ClawHub）保持一致。
+
 ## License
 
 MIT — see [LICENSE](LICENSE). This skill wraps Microsoft's MarkItDown (also MIT); the

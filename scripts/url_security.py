@@ -13,6 +13,7 @@ Enabled by default; only an explicit --allow-internal overrides it for
 trusted local development.
 """
 import ipaddress
+import socket
 import re
 import urllib.parse
 
@@ -57,4 +58,35 @@ def _is_blocked_target(url, allow_internal=False):
     if (ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
             or ip.is_multicast or ip in ipaddress.ip_network("100.64.0.0/10")):
         return True, "private/internal IP blocked: %s" % ip
+    return False, ""
+
+
+def resolve_and_check(host, allow_internal=False):
+    """Best-effort DNS-level re-validation. Returns (blocked: bool, reason: str).
+
+    Resolves `host` and refuses it when ANY resolved address falls in a
+    loopback / private / link-local / reserved / multicast / CGNAT range.
+
+    Honest limitation: this is a check-before-use, not a pin — a hostile DNS
+    server can still rebind between this lookup and the actual connect
+    (TOCTOU). It therefore COMPLEMENTS, not replaces, two other guards:
+      * redirect-target validation (each hop re-checked before following), and
+      * the in-function re-checks in url_fetch / spa_extract.
+    Together they close the common "public hostname -> internal IP" and
+    "public URL redirects to 169.254.169.254" paths.
+    """
+    if allow_internal or not host:
+        return False, ""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:  # resolution failure here is not fatal; connect/redirect checks still apply
+        return False, ""
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except (ValueError, IndexError):
+            continue
+        if (ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip in ipaddress.ip_network("100.64.0.0/10")):
+            return True, "hostname resolves to private/internal IP: %s" % ip
     return False, ""

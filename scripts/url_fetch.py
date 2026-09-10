@@ -118,7 +118,37 @@ def render_with_browser(url, browser, virtual_time=8000, allow_internal=False):
         return None
 
 
-def fetch_html(url, timeout=40):
+class ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-check every redirect hop against the SSRF guard before following it.
+
+    urllib follows 3xx automatically, which would otherwise let a public URL
+    bounce the request to a loopback address, the cloud metadata endpoint,
+    or other private/internal address space.
+    """
+
+    def __init__(self, allow_internal=False):
+        self.allow_internal = allow_internal
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            from url_security import _is_blocked_target
+        except ImportError:  # package used standalone; default urllib behaviour
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+        blocked, reason = _is_blocked_target(newurl, self.allow_internal)
+        if blocked:
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                "redirect target refused by SSRF guard: %s" % reason, headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def safe_urlopen(req, timeout=40, allow_internal=False):
+    """urlopen with redirect-target validation (defense in depth)."""
+    opener = urllib.request.build_opener(ValidatingRedirectHandler(allow_internal))
+    return opener.open(req, timeout=timeout)
+
+
+def fetch_html(url, timeout=40, allow_internal=False):
     """Fetch raw HTML with a full browser UA. Returns decoded text or raises."""
     headers = {
         "User-Agent": BROWSER_UA,
@@ -127,4 +157,5 @@ def fetch_html(url, timeout=40):
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
     req = urllib.request.Request(url, headers=headers)
-    return urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "ignore")
+    return safe_urlopen(req, timeout=timeout,
+                        allow_internal=allow_internal).read().decode("utf-8", "ignore")
