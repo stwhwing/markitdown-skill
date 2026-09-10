@@ -1,0 +1,6 @@
+# Compiled bytecode must never ship in a published skill package
+__pycache__/
+*.pyc
+
+# Internal publishing note (not part of the public package)
+PUBLISH.md
