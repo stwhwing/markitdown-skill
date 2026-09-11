@@ -62,6 +62,23 @@ def emit(md, out):
         sys.stdout.write(md)
 
 
+# Stable exit codes (documented in SKILL.md) so callers can branch on failure
+# type without parsing stderr.
+EXIT_OK = 0          # success
+EXIT_USAGE = 2       # bad arguments (argparse default)
+EXIT_BLOCKED = 3     # refused by the SSRF guard
+EXIT_FETCH = 4       # every fetch path failed (network / proxy / DNS / anti-bot)
+EXIT_CONTENT = 5     # fetched something but no meaningful content could be extracted
+EXIT_OUTPUT = 6      # could not write the output file
+
+
+def die(code, message, hint=None):
+    print("[error] %s" % message, file=sys.stderr)
+    if hint:
+        print("[hint]  %s" % hint, file=sys.stderr)
+    sys.exit(code)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Convert a URL to Markdown with SPA fallback")
     ap.add_argument("url")
@@ -72,13 +89,17 @@ def main():
                     help="Virtual time (ms) for SPA JS to run (default 8000)")
     ap.add_argument("--allow-internal", action="store_true",
                     help="Override the internal/loopback URL guard (trusted local dev only)")
+    ap.add_argument("--strict-pin", action="store_true",
+                    help="Bypass the HTTP proxy and pin DNS to the validated IP "
+                         "(use only where direct egress is available)")
     args = ap.parse_args()
 
     # SSRF guard — refuse internal/private targets before any fetch/render.
     blocked, reason = _is_blocked_target(args.url, args.allow_internal)
     if blocked:
-        print("[blocked] refusing to fetch blocked target: %s" % reason, file=sys.stderr)
-        sys.exit(3)
+        die(EXIT_BLOCKED, "refusing to fetch blocked target: %s" % reason,
+            "Only public http/https URLs are supported. If this is a trusted "
+            "local/intranet page, re-run with --allow-internal.")
 
     # DNS-level re-validation (best effort — see url_security.resolve_and_check
     # for its TOCTOU caveat; it complements the redirect and in-function checks).
@@ -86,8 +107,9 @@ def main():
     _host = _up.urlparse(args.url).hostname or ""
     blocked_dns, reason_dns = resolve_and_check(_host, args.allow_internal)
     if blocked_dns:
-        print("[blocked] refusing to fetch target: %s" % reason_dns, file=sys.stderr)
-        sys.exit(3)
+        die(EXIT_BLOCKED, "refusing to fetch target: %s" % reason_dns,
+            "The hostname resolves into a private/loopback range. Use a public "
+            "mirror, or --allow-internal for trusted local development.")
 
     warn_media_backends(args.url)
 
@@ -95,9 +117,11 @@ def main():
     #    Using our own UA-aware fetch (instead of markitdown's internal GET) defeats
     #    WeChat-style anti-bot challenges that would otherwise return an empty page.
     direct_md = ""
+    fetch_error = None
     if not args.force_browser:
         try:
-            raw = fetch_html(args.url, allow_internal=args.allow_internal)
+            raw = fetch_html(args.url, allow_internal=args.allow_internal,
+                             strict_pin=args.strict_pin)
             # WeChat articles: extract title / account / publish time plus the
             # #js_content body directly, instead of the whole ~3 MB shell.
             wx = extract_wechat_article(raw)
@@ -126,7 +150,11 @@ def main():
                     pass
                 direct_md = res.stdout or ""
         except Exception as e:  # noqa: BLE001
+            fetch_error = e
             print(f"[fetch] direct fetch failed: {e}", file=sys.stderr)
+            print("[hint]  Check the URL is reachable (and, if this machine uses a "
+                  "proxy, that the proxy allows it). Try --force-browser, or "
+                  "--strict-pin when direct egress is available.", file=sys.stderr)
         if accept_content(direct_md):
             emit(direct_md, args.output)
             return
@@ -135,7 +163,8 @@ def main():
     browser = None if args.no_browser else find_browser()
     fallback_md = ""
     if browser:
-        html = render_with_browser(args.url, browser, args.virtual_time_budget, allow_internal=args.allow_internal)
+        html = render_with_browser(args.url, browser, args.virtual_time_budget,
+                                   allow_internal=args.allow_internal)
         if html:
             res = run_markitdown_on_file(html)
             md = res.stdout or ""
@@ -176,10 +205,15 @@ def main():
         emit(best, args.output)
         return
 
-    print("[spa-fallback] Could not extract meaningful content. The page is a JS-rendered SPA "
-          "and no headless browser / embedded JSON was available. Try the WebFetch tool, or run "
-          "with a browser installed (Chrome/Edge on Windows, chromium on Linux).", file=sys.stderr)
-    sys.exit(2)
+    if fetch_error is not None and not fallback_md:
+        die(EXIT_FETCH, "could not fetch %s: %s" % (args.url, fetch_error),
+            "Verify network/proxy/DNS, then retry; --strict-pin bypasses a proxy, "
+            "--no-browser skips the renderer.")
+    die(EXIT_CONTENT,
+        "fetched the page but could not extract meaningful content "
+        "(JS-rendered SPA, paywall/app-reader shell, or anti-bot challenge).",
+        "Install a browser for the render fallback (Chrome/Edge on Windows, "
+        "chromium on Linux) or use the platform's WebFetch tool.")
 
 
 if __name__ == "__main__":

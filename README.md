@@ -37,6 +37,7 @@ cuts AI token cost by 80%+.
 | `scripts/token_saver.py` | Local token-cost / saving estimator |
 | `scripts/measure_tokens.py` | Token counter / cost measurement for any text |
 | `scripts/batch_convert.py` | Batch file → Markdown helper |
+| `requirements.txt` | Bounded dependency spec (`pip install -r requirements.txt`) |
 | `references/reference.md` | MarkItDown API reference |
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |
 | `references/TOKEN-SAVER.md` | Token-saving methodology & honesty notes |
@@ -84,6 +85,10 @@ files and links to Markdown before analysing them, and will route every web link
   Chromium's sandbox enabled by default; `--no-sandbox` is only used automatically
   when running as root or when the sandboxed launch crashes in restricted containers
   (a notice is printed to stderr when that happens).
+- **Network boundary, stated honestly.** Direct fetches are pinned to the validated IP
+  (DNS-rebinding defence) and every redirect hop is re-checked; the browser fallback maps the
+  target host to that same IP. Pinning is skipped when an HTTP proxy performs the connection,
+  and sub-resource hosts inside a rendered page are not network-filtered (accepted limitation).
 - **Optional external capabilities are off by default.** The skill can optionally use
   OpenAI image descriptions, Azure Document Intelligence, or third-party plugins, but these
   are disabled unless you explicitly enable them and they require your consent. Never feed

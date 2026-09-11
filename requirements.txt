@@ -1,0 +1,17 @@
+# markitdown-skill dependencies
+#
+# Bounded (upper-capped) rather than fully pinned, so the skill keeps working
+# with patch releases while a breaking major/minor cannot slip in silently.
+# For byte-reproducible installs, replace the range with the exact version you
+# verified locally (see `pip show markitdown`) — ClawHub/SkillHub reviewers
+# specifically look for a deliberate, documented pinning strategy.
+markitdown[all]>=0.1.3,<1.0
+
+# Optional, only needed for `--llm-model` image descriptions / document analysis.
+# Disabled by default and never used without explicit user consent.
+# openai>=1.0,<2.0
+
+# System (non-pip) dependencies, install via your package manager:
+#   ffmpeg    - audio/video transcription        (apt: ffmpeg / brew: ffmpeg)
+#   chromium  - SPA render fallback on Linux     (apt: chromium / brew: chromium)
+#   exiftool  - optional image EXIF metadata     (apt: libimage-exiftool-perl)
