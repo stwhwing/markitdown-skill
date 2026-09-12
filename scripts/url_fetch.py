@@ -38,10 +38,51 @@ def _make_temp_html(prefix="mid_"):
     return tf.name
 
 
+def _validated_markitdown_bin(raw):
+    """Strict-allowlist validation for the MARKITDOWN_BIN override.
+
+    Returns the absolute path when it is safe to execute, else ``None`` (the
+    caller then falls back to ``python -m markitdown``). Rejected on purpose:
+
+    - empty / non-absolute paths (a relative name would be resolved against
+      PATH and could pick up an unrelated or attacker-planted program);
+    - paths that are not a regular file;
+    - on POSIX only: files that are not executable, or are writable by group /
+      other (a shared-writable binary can be swapped between this check and
+      exec — TOCTOU tampering).
+
+    Reading an executable location from the environment is only safe when the
+    value is pinned: an unrestricted env var can otherwise redirect execution
+    to an attacker-controlled program.
+    """
+    v = (raw or "").strip()
+    if not v or not os.path.isabs(v):
+        return None
+    try:
+        st = os.stat(v)
+    except OSError:
+        return None
+    if not os.path.isfile(v):
+        return None
+    if os.name != "nt":
+        # Windows has no POSIX mode bits: os.chmod cannot set X_OK and every
+        # file reports 0o666, so these checks would reject all binaries there.
+        if not os.access(v, os.X_OK):
+            return None
+        if st.st_mode & 0o022:  # group- or world-writable -> not trusted
+            return None
+    return v
+
+
 def markitdown_cmd():
-    """Return a command prefix that runs markitdown via the current interpreter."""
-    env_bin = os.environ.get("MARKITDOWN_BIN")
-    if env_bin and os.path.exists(env_bin):
+    """Return a command prefix that runs markitdown via the current interpreter.
+
+    MARKITDOWN_BIN is honoured only after strict validation (absolute path,
+    regular executable file, not group/world-writable); anything else is
+    ignored and the trusted ``python -m markitdown`` module path is used.
+    """
+    env_bin = _validated_markitdown_bin(os.environ.get("MARKITDOWN_BIN"))
+    if env_bin:
         return [env_bin]
     # Run as a module with the same interpreter that has markitdown installed
     return [sys.executable, "-m", "markitdown"]

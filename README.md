@@ -83,8 +83,16 @@ files and links to Markdown before analysing them, and will route every web link
   deliberately need to fetch a local/intranet page.
 - **Sandbox-first headless rendering.** The SPA fallback launches the browser with
   Chromium's sandbox enabled by default; `--no-sandbox` is only used automatically
-  when running as root or when the sandboxed launch crashes in restricted containers
-  (a notice is printed to stderr when that happens).
+  when running as root (where Chromium's sandbox cannot start) or when the sandboxed
+  launch crashes in restricted containers. The fallback is never silent — a notice is
+  printed to stderr — and there is no user-facing flag that turns the sandbox off.
+- **`MARKITDOWN_BIN` is validated before use.** If that environment variable is set, it
+  is honoured only when it is an absolute path to a regular, executable file that is not
+  group- or world-writable; otherwise it is ignored and the trusted `python -m markitdown`
+  module path is used. This closes the "redirect execution via a writable env var" hole.
+- **`--allow-internal` is an explicit, off-by-default opt-in.** It exists solely for trusted
+  local development against loopback/intranet pages, must be passed deliberately on the
+  command line, and should never be used on shared, production, or sensitive hosts.
 - **Network boundary, stated honestly.** Direct fetches are pinned to the validated IP
   (DNS-rebinding defence) and every redirect hop is re-checked; the browser fallback maps the
   target host to that same IP. Pinning is skipped when an HTTP proxy performs the connection,
