@@ -65,11 +65,11 @@ def _validated_markitdown_bin(raw):
     if not os.path.isfile(v):
         return None
     if os.name != "nt":
-        # Windows has no POSIX mode bits: os.chmod cannot set X_OK and every
-        # file reports 0o666, so these checks would reject all binaries there.
+        # Windows has no POSIX mode bits (every file reports the same mode),
+        # so the executable / ownership checks below are skipped there.
         if not os.access(v, os.X_OK):
             return None
-        if st.st_mode & 0o022:  # group- or world-writable -> not trusted
+        if st.st_mode & 0o022:  # group/other write access -> not trusted
             return None
     return v
 
@@ -78,7 +78,7 @@ def markitdown_cmd():
     """Return a command prefix that runs markitdown via the current interpreter.
 
     MARKITDOWN_BIN is honoured only after strict validation (absolute path,
-    regular executable file, not group/world-writable); anything else is
+    regular executable file, no group/other write access); anything else is
     ignored and the trusted ``python -m markitdown`` module path is used.
     """
     env_bin = _validated_markitdown_bin(os.environ.get("MARKITDOWN_BIN"))

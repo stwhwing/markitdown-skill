@@ -88,8 +88,9 @@ files and links to Markdown before analysing them, and will route every web link
   printed to stderr — and there is no user-facing flag that turns the sandbox off.
 - **`MARKITDOWN_BIN` is validated before use.** If that environment variable is set, it
   is honoured only when it is an absolute path to a regular, executable file that is not
-  group- or world-writable; otherwise it is ignored and the trusted `python -m markitdown`
-  module path is used. This closes the "redirect execution via a writable env var" hole.
+  writable by group or other users; otherwise it is ignored and the trusted
+  `python -m markitdown` module path is used. This closes the "redirect execution via a
+  writable env var" hole.
 - **`--allow-internal` is an explicit, off-by-default opt-in.** It exists solely for trusted
   local development against loopback/intranet pages, must be passed deliberately on the
   command line, and should never be used on shared, production, or sensitive hosts.
