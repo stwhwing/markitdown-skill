@@ -6,8 +6,10 @@ bytes (browser UA fetch, temp HTML files, invoking markitdown, locating and
 driving a headless browser) lives here. Content *judgement* lives in
 ``content_detect.py``; security *policy* lives in ``url_security.py``.
 """
+import gzip
 import http.client
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -15,6 +17,7 @@ import sys
 import tempfile
 import urllib.parse
 import urllib.request
+import zlib
 from functools import partial
 
 # Full browser UA — many sites (notably mp.weixin.qq.com / WeChat) block requests
@@ -345,6 +348,42 @@ def _proxy_applies(url, proxies):
         return bool(proxies)
 
 
+def _decode_body(raw, content_encoding, content_type=""):
+    """Undo ``Content-Encoding`` first, then decode the bytes to text.
+
+    urllib does NOT decompress transparently (unlike ``requests``), so a response
+    that arrives gzip/deflate/br-compressed would otherwise be handed straight to
+    ``bytes.decode()`` — yielding silent mojibake while the tool still exits 0.
+    Observed live (2026-09-15, both the Windows host and the Linux deployment):
+    ``https://www.python.org/`` replies ``content-encoding: gzip`` and the
+    converted Markdown came out as unreadable bytes.
+    """
+    enc = (content_encoding or "").strip().lower()
+    try:
+        if enc in ("gzip", "x-gzip"):
+            raw = gzip.decompress(raw)
+        elif enc == "deflate":
+            try:
+                raw = zlib.decompress(raw)
+            except zlib.error:  # raw deflate without the zlib wrapper
+                raw = zlib.decompress(raw, -zlib.MAX_WBITS)
+        elif enc == "br":
+            import brotli  # optional dependency
+            raw = brotli.decompress(raw)
+        elif enc == "zstd":
+            import zstandard  # optional dependency
+            raw = zstandard.ZstdDecompressor().decompress(raw)
+    except Exception:  # noqa: BLE001 - unknown/corrupt encoding: use what we got
+        pass
+    match = re.search(r"charset=([\w\-]+)", content_type or "", re.I)
+    for charset in ([match.group(1)] if match else []) + ["utf-8"]:
+        try:
+            return raw.decode(charset)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return raw.decode("utf-8", "ignore")
+
+
 def fetch_html(url, timeout=40, allow_internal=False, strict_pin=False):
     """Fetch raw HTML with a full browser UA. Returns decoded text or raises."""
     headers = {
@@ -354,5 +393,8 @@ def fetch_html(url, timeout=40, allow_internal=False, strict_pin=False):
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
     req = urllib.request.Request(url, headers=headers)
-    return safe_urlopen(req, timeout=timeout, allow_internal=allow_internal,
-                        strict_pin=strict_pin).read().decode("utf-8", "ignore")
+    with safe_urlopen(req, timeout=timeout, allow_internal=allow_internal,
+                      strict_pin=strict_pin) as resp:
+        return _decode_body(resp.read(),
+                            resp.headers.get("Content-Encoding"),
+                            resp.headers.get("Content-Type"))

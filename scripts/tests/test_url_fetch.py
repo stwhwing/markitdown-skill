@@ -12,16 +12,18 @@ initialise the base handler, so every pinned request failed with::
 Usage:
     python scripts/tests/test_url_fetch.py     # exits non-zero on failure
 """
+import gzip
 import os
 import sys
 import urllib.request
+import zlib
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.dirname(_HERE)
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-from url_fetch import PinnedHandler  # noqa: E402
+from url_fetch import PinnedHandler, _decode_body  # noqa: E402
 
 
 class _StopHere(Exception):
@@ -73,10 +75,41 @@ def test_pinned_handler_do_open_reaches_connection():
     raise AssertionError("do_open() unexpectedly returned without contacting anything")
 
 
+def test_decode_body_undoes_gzip():
+    """gzip must be decompressed, not decoded as raw bytes (silent mojibake).
+
+    Regression: https://www.python.org/ answers `content-encoding: gzip`; without
+    decompression the converted Markdown was unreadable yet the tool exited 0.
+    """
+    html = "<html><body><p>hello 世界</p></body></html>"
+    assert _decode_body(gzip.compress(html.encode("utf-8")),
+                        "gzip", "text/html; charset=utf-8") == html
+
+
+def test_decode_body_undoes_deflate_and_passes_plain_through():
+    html = "<html><body>plain</body></html>"
+    encoded = html.encode("utf-8")
+    assert _decode_body(encoded, None, "text/html") == html
+    assert _decode_body(encoded, "", "text/html") == html
+    assert _decode_body(zlib.compress(encoded), "deflate", "text/html") == html
+    # raw deflate (no zlib wrapper) must work too
+    compressor = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+    raw_deflate = compressor.compress(encoded) + compressor.flush()
+    assert _decode_body(raw_deflate, "deflate", "text/html") == html
+
+
+def test_decode_body_honours_declared_charset():
+    html = "<html><body>中文</body></html>"
+    assert _decode_body(html.encode("gb18030"), None, "text/html; charset=gb18030") == html
+
+
 def main():
     tests = [
         test_pinned_handler_has_debuglevel,
         test_pinned_handler_do_open_reaches_connection,
+        test_decode_body_undoes_gzip,
+        test_decode_body_undoes_deflate_and_passes_plain_through,
+        test_decode_body_honours_declared_charset,
     ]
     failed = 0
     for test in tests:
