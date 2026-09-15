@@ -14,6 +14,10 @@ For compressed binary formats (.pdf/.docx/.pptx/.xlsx/...) WITHOUT a baseline, t
 does NOT fabricate a saving — it just reports the Markdown token cost, because the AI
 cannot ingest the raw binary anyway (Markdown is the only practical input).
 
+A baseline alone is still not enough: the converted Markdown must also contain real text.
+If the output is shorter than content_detect's TEXT_THRESHOLD (a failed / anti-bot /
+empty-shell extraction), the script reports no saving instead of a fictitious one.
+
 All token counts use a chars/4 heuristic and are APPROXIMATE (order-of-magnitude), not bills.
 
 Usage:
@@ -26,6 +30,18 @@ from pathlib import Path
 
 # Rough tokens per dense page for PDF/image estimation (heuristic only).
 PAGE_TOKENS = 1500
+
+# "Did we actually get content?" threshold, reused from content_detect (shipped in the
+# same package) so the two never drift; fallback is the same value. Output shorter than
+# this means the conversion produced no real text (anti-bot / empty-shell page), and a
+# "saving" would be fiction — see the docstring note on honest accounting.
+try:  # pragma: no cover - content_detect ships with this package
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from content_detect import TEXT_THRESHOLD as _MIN_REAL_CHARS
+except Exception:  # noqa: BLE001
+    _MIN_REAL_CHARS = 120
+
+MIN_REAL_CONTENT_TOKENS = max(1, -(-_MIN_REAL_CHARS // 4))
 
 
 def estimate_tokens(text: str) -> int:
@@ -102,17 +118,25 @@ def main() -> int:
         raw_tokens = max(1, args.pages * PAGE_TOKENS)
         basis = f"--pages {args.pages} * {PAGE_TOKENS} (estimate)"
 
-    # --- Compute saving (honest; only when a real baseline exists) ---
-    saved_tokens = max(0, (raw_tokens - md_tokens)) if raw_tokens else 0
+    # --- Compute saving (honest; needs a real baseline AND real output) ---
+    # A baseline alone is not enough: if the Markdown is too short to be content, the
+    # extraction failed and no saving may be claimed (raw HTML may still be large).
+    content_ok = md_tokens >= MIN_REAL_CONTENT_TOKENS
+    saved_tokens = max(0, (raw_tokens - md_tokens)) if (raw_tokens and content_ok) else 0
     saved_pct = (
         max(0.0, (raw_tokens - md_tokens)) / raw_tokens * 100
-    ) if raw_tokens else 0.0
+    ) if (raw_tokens and content_ok) else 0.0
 
     # --- Human-readable report ---
     print("--- Token cost (approximate) ---")
     print(f"Source           : {input_path.name} ({ext or 'unknown'})")
     print(f"Markdown tokens  : {md_tokens:,}   (actual AI cost)")
-    if raw_tokens:
+    if raw_tokens and not content_ok:
+        print(f"Raw baseline     : {raw_tokens:,}   ({basis})")
+        print("Estimated saving : n/a — output too short to be real content")
+        print(f"  ({md_tokens} md tokens < {MIN_REAL_CONTENT_TOKENS}; the extraction likely")
+        print("   failed, e.g. an anti-bot / empty-shell page, so no saving is claimed.)")
+    elif raw_tokens:
         print(f"Raw baseline     : {raw_tokens:,}   ({basis})")
         print(f"Estimated saving : {saved_pct:.1f}%")
     else:

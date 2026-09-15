@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Regression tests for url_fetch.py — runnable with plain Python (no pytest needed).
+
+Pins down the 2026-09-14 regression in which ``PinnedHandler.__init__`` did not
+initialise the base handler, so every pinned request failed with::
+
+    AttributeError: 'PinnedHandler' object has no attribute '_debuglevel'
+
+(``do_open()`` reads ``self._debuglevel``; it is set by
+``urllib.request.AbstractHTTPHandler.__init__``.)
+
+Usage:
+    python scripts/tests/test_url_fetch.py     # exits non-zero on failure
+"""
+import os
+import sys
+import urllib.request
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_SCRIPTS = os.path.dirname(_HERE)
+if _SCRIPTS not in sys.path:
+    sys.path.insert(0, _SCRIPTS)
+
+from url_fetch import PinnedHandler  # noqa: E402
+
+
+class _StopHere(Exception):
+    """Sentinel: do_open() got past the ``self._debuglevel`` access."""
+
+
+class _FakeHTTPConnection:
+    """Stands in for http.client.HTTPConnection so do_open() can be driven offline."""
+
+    def __init__(self, host, timeout=None, **kwargs):
+        self.host = host
+
+    def set_debuglevel(self, level):
+        self.debuglevel = level
+
+    def request(self, *args, **kwargs):
+        pass
+
+    def getresponse(self):
+        raise _StopHere("reached the connection layer")
+
+    def close(self):
+        """do_open() closes the connection on the way out of its error path."""
+
+
+def test_pinned_handler_has_debuglevel():
+    """Base-handler state must exist immediately after construction."""
+    handler = PinnedHandler()
+    assert hasattr(handler, "_debuglevel"), (
+        "PinnedHandler must initialise AbstractHTTPHandler state; "
+        "do_open() reads self._debuglevel"
+    )
+    assert handler.allow_internal is False
+
+
+def test_pinned_handler_do_open_reaches_connection():
+    """do_open() must not raise AttributeError (the regression being pinned down)."""
+    handler = PinnedHandler()
+    request = urllib.request.Request("http://example.com/")
+    request.timeout = 30  # built_opener().open(..., timeout=) sets this in real use;
+    #                      do_open() reads req.timeout *before* self._debuglevel,
+    #                      so it must be present for this test to reach the bug
+    try:
+        handler.do_open(_FakeHTTPConnection, request)
+    except AttributeError as exc:  # the bug itself
+        raise AssertionError("do_open() raised AttributeError: %s" % exc)
+    except Exception:  # any other error => execution passed the _debuglevel access
+        return
+    raise AssertionError("do_open() unexpectedly returned without contacting anything")
+
+
+def main():
+    tests = [
+        test_pinned_handler_has_debuglevel,
+        test_pinned_handler_do_open_reaches_connection,
+    ]
+    failed = 0
+    for test in tests:
+        try:
+            test()
+            print("PASS %s" % test.__name__)
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            print("FAIL %s: %s" % (test.__name__, exc))
+    print("%d/%d passed" % (len(tests) - failed, len(tests)))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

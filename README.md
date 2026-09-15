@@ -37,6 +37,7 @@ cuts AI token cost by 80%+.
 | `scripts/token_saver.py` | Local token-cost / saving estimator |
 | `scripts/measure_tokens.py` | Token counter / cost measurement for any text |
 | `scripts/batch_convert.py` | Batch file → Markdown helper |
+| `scripts/tests/test_url_fetch.py` | Regression tests for the URL fetcher (plain Python 3, no pytest needed) |
 | `requirements.txt` | Bounded dependency spec (`pip install -r requirements.txt`) |
 | `references/reference.md` | MarkItDown API reference |
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |

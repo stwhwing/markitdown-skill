@@ -235,6 +235,17 @@ class PinnedHandler(urllib.request.HTTPHandler, urllib.request.HTTPSHandler):
     """
 
     def __init__(self, allow_internal=False):
+        # Initialise the base-handler state before any request is opened. Without
+        # it, do_open() -> h.set_debuglevel(self._debuglevel) raises
+        # AttributeError: 'PinnedHandler' object has no attribute '_debuglevel'
+        # (reproduced on the deployed Linux host, 2026-09-14).
+        #
+        # AbstractHTTPHandler.__init__ is called explicitly instead of a bare
+        # super().__init__(): the MRO would reach HTTPSHandler.__init__, which
+        # also builds an SSL context this handler never uses (it overrides
+        # http_open/https_open and drives do_open with its own pinned connection
+        # classes) — and that context would be rebuilt on every request.
+        urllib.request.AbstractHTTPHandler.__init__(self)
         self.allow_internal = allow_internal
 
     def _pin_for(self, url):
