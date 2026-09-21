@@ -36,8 +36,13 @@ Run with the Python interpreter that has `markitdown` installed
 (eg. WorkBuddy managed venv: ~/.workbuddy/binaries/python/envs/default/Scripts/python.exe).
 """
 import argparse
+import datetime
+import hashlib
+import json
 import os
+import re
 import sys
+import tempfile
 
 # Make sibling modules importable no matter how the script is invoked
 # (direct path, `python -m`, or imported from another directory).
@@ -51,15 +56,98 @@ from spa_extract import (extract_embedded_json, extract_wechat_article,         
                          json_to_markdown)
 from url_fetch import (_make_temp_html, fetch_html, find_browser,               # noqa: E402
                        render_with_browser, run_markitdown_on_file)
-from url_security import _is_blocked_target, resolve_and_check                                     # noqa: E402
+from url_security import _is_blocked_target, resolve_and_check                  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# output helpers (atomic write + manifest + prompt-injection boundary)
+# ---------------------------------------------------------------------------
+def _atomic_write_text(path, text):
+    """Write `text` to `path` atomically: temp file then os.replace.
+
+    A crash mid-write leaves no half-written file behind, and a reader never
+    sees a partial document. os.replace is atomic on both POSIX and Windows.
+    """
+    d = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=d, suffix=".md.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def emit(md, out):
     if out:
-        with open(out, "w", encoding="utf-8") as f:
-            f.write(md)
+        _atomic_write_text(out, md)
     else:
         sys.stdout.write(md)
+
+
+# Active-content / prompt-injection boundaries. Web page text is UNTRUSTED DATA,
+# not instructions: a hostile page could embed "ignore previous instructions …".
+_SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
+_STYLE_RE = re.compile(r"<style\b[^>]*>.*?</style>", re.I | re.S)
+_JS_URI_RE = re.compile(r"(]\(\s*|\!\[\]?\()\s*(?:javascript|data):", re.I)
+
+
+def _sanitize_markdown(md, src):
+    """Strip active content and fence the payload with external-content markers.
+
+    Best-effort, not a security boundary: drops <script>/<style> blocks,
+    neutralises javascript:/data: URIs in markdown links/images, and wraps the
+    whole result between explicit boundary markers so downstream consumers can
+    treat it strictly as data and ignore any embedded "instructions".
+    """
+    body = _SCRIPT_RE.sub("", md)
+    body = _STYLE_RE.sub("", body)
+    body = _JS_URI_RE.sub(lambda m: m.group(1) + "sanitized-uri:", body)
+    return ("--- EXTERNAL CONTENT [source: %s] ---\n%s\n"
+            "--- END EXTERNAL CONTENT ---\n" % (src or "unknown", body))
+
+
+def _quality_score(md):
+    """Heuristic quality assessment of converted markdown (no external calls)."""
+    n = meaningful_len(md)
+    real = is_real_content(md)
+    if n >= 800 and real:
+        score = "high"
+    elif n >= 200:
+        score = "medium"
+    else:
+        score = "low"
+    return {"meaningful_chars": n, "real_content": bool(real), "score": score}
+
+
+def _write_manifest(path, record):
+    """Append one conversion record (JSON line) to the manifest at `path`."""
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print("[manifest] could not write %s: %s" % (path, e), file=sys.stderr)
+
+
+def deliver(md, url, out, manifest_path=None, sanitize=False):
+    """Sanitize (opt), write atomically, and append a provenance manifest record."""
+    if sanitize:
+        md = _sanitize_markdown(md, url)
+    emit(md, out)
+    if manifest_path:
+        rec = {
+            "source": url,
+            "output": out or "<stdout>",
+            "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "md_bytes": len(md.encode("utf-8", "ignore")),
+            "md_sha256": hashlib.sha256(md.encode("utf-8", "ignore")).hexdigest(),
+            "quality": _quality_score(md),
+        }
+        _write_manifest(manifest_path, rec)
 
 
 # Stable exit codes (documented in SKILL.md) so callers can branch on failure
@@ -79,6 +167,14 @@ def die(code, message, hint=None):
     sys.exit(code)
 
 
+def _ocr_hint():
+    """Print a one-line upgrade suggestion for scanned / image-only sources."""
+    print("[hint]  If the source is a scanned PDF or image with no selectable "
+          "text, try markitdown with Azure Document Intelligence "
+          "(--docintel-endpoint) or a local OCR step before converting.",
+          file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Convert a URL to Markdown with SPA fallback")
     ap.add_argument("url")
@@ -92,6 +188,11 @@ def main():
     ap.add_argument("--strict-pin", action="store_true",
                     help="Bypass the HTTP proxy and pin DNS to the validated IP "
                          "(use only where direct egress is available)")
+    ap.add_argument("--sanitize", action="store_true",
+                    help="Strip <script>/<style> and javascript:/data: URIs, and wrap "
+                         "output in EXTERNAL CONTENT boundary markers (treat as data)")
+    ap.add_argument("--manifest", help="Append a JSON-lines provenance/quality record "
+                                       "per conversion to this file")
     args = ap.parse_args()
 
     # SSRF guard — refuse internal/private targets before any fetch/render.
@@ -156,7 +257,7 @@ def main():
                   "proxy, that the proxy allows it). Try --force-browser, or "
                   "--strict-pin when direct egress is available.", file=sys.stderr)
         if accept_content(direct_md):
-            emit(direct_md, args.output)
+            deliver(direct_md, args.url, args.output, args.manifest, args.sanitize)
             return
 
     # 2) browser
@@ -173,7 +274,7 @@ def main():
             except OSError:
                 pass
             if accept_content(md):
-                emit(md, args.output)
+                deliver(md, args.url, args.output, args.manifest, args.sanitize)
                 return
             fallback_md = md
             print("[spa-fallback] browser render produced little text; trying JSON extraction",
@@ -186,7 +287,7 @@ def main():
         if not md:
             # flatten produced nothing usable (e.g. non-JSON); keep old raw fallback
             md = f"<!-- embedded JSON extracted from SPA (flatten failed, raw fallback) -->\n\n```json\n{js}\n```\n"
-        emit(md, args.output)
+        deliver(md, args.url, args.output, args.manifest, args.sanitize)
         return
 
     # 4) safety net: never discard content we already have (direct or browser render).
@@ -198,11 +299,12 @@ def main():
                   "paywall/app reader, or anti-bot blocked. For full fidelity try the WebFetch "
                   "tool, or run with a browser installed (Chrome/Edge on Windows, chromium on "
                   "Linux).", file=sys.stderr)
+            _ocr_hint()
         else:
             print("[spa-fallback] returning best-effort content (page may be a JS-rendered SPA). "
                   "For full fidelity ensure a browser (Chrome/Edge/Chromium) is installed or use "
                   "the WebFetch tool.", file=sys.stderr)
-        emit(best, args.output)
+        deliver(best, args.url, args.output, args.manifest, args.sanitize)
         return
 
     if fetch_error is not None and not fallback_md:

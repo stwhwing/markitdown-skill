@@ -8,6 +8,7 @@ driving a headless browser) lives here. Content *judgement* lives in
 """
 import gzip
 import http.client
+import io
 import os
 import re
 import shutil
@@ -280,18 +281,72 @@ class PinnedHandler(urllib.request.HTTPHandler, urllib.request.HTTPSHandler):
         return self.do_open(partial(_PinnedHTTPSConnection, pinned_ip=ip), req)
 
 
+# ---- response size limits (SSRF-adjacent hardening) -----------------------
+# A misconfigured or hostile host could answer with an unbounded body (e.g. a
+# multi-GB stream) and exhaust memory before markitdown even runs. We cap both
+# the RAW bytes we buffer and the DECOMPRESSED bytes we keep.
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024        # 32 MiB raw body cap
+MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MiB after decompression
+MAX_REDIRECT_HOPS = 10                       # refuse redirect loops / chains
+
+
+def _read_body_limited(resp, max_bytes):
+    """Read ``resp`` in bounded chunks, raising if it exceeds ``max_bytes``.
+
+    urllib's ``read()`` with no size streams the whole body into memory; this
+    wrapper enforces a hard ceiling and surfaces a clear, catchable error.
+    """
+    chunks = []
+    total = 0
+    while True:
+        chunk = resp.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        chunks.append(chunk)
+        if total > max_bytes:
+            raise urllib.error.URLError(
+                "response body too large (>{0} bytes); refusing to buffer".format(max_bytes))
+    return b"".join(chunks)
+
+
+def _gzip_decompress_bounded(data, limit):
+    """Streaming gzip decompress that aborts past ``limit`` bytes (no OOM)."""
+    out = io.BytesIO()
+    total = 0
+    with gzip.GzipFile(fileobj=io.BytesIO(data)) as gz:
+        while True:
+            chunk = gz.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ValueError(
+                    "decompressed payload exceeds {0} bytes; refusing".format(limit))
+            out.write(chunk)
+    return out.getvalue()
+
+
 class ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Re-check every redirect hop against the SSRF guard before following it.
 
     urllib follows 3xx automatically, which would otherwise let a public URL
     bounce the request to a loopback address, the cloud metadata endpoint,
-    or other private/internal address space.
+    or other private/internal address space. A per-request hop counter also
+    refuses redirect loops / absurdly long chains.
     """
 
     def __init__(self, allow_internal=False):
         self.allow_internal = allow_internal
+        self._hops = 0
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        self._hops += 1
+        if self._hops > MAX_REDIRECT_HOPS:
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                "too many redirects (>{0}); possible redirect loop".format(MAX_REDIRECT_HOPS),
+                headers, fp)
         try:
             from url_security import _is_blocked_target
         except ImportError:  # package used standalone; default urllib behaviour
@@ -357,11 +412,14 @@ def _decode_body(raw, content_encoding, content_type=""):
     Observed live (2026-09-15, both the Windows host and the Linux deployment):
     ``https://www.python.org/`` replies ``content-encoding: gzip`` and the
     converted Markdown came out as unreadable bytes.
+
+    Decompressed output is bounded by MAX_DECOMPRESSED_BYTES to stop a small
+    compressed body from expanding into a huge in-memory string.
     """
     enc = (content_encoding or "").strip().lower()
     try:
         if enc in ("gzip", "x-gzip"):
-            raw = gzip.decompress(raw)
+            raw = _gzip_decompress_bounded(raw, MAX_DECOMPRESSED_BYTES)
         elif enc == "deflate":
             try:
                 raw = zlib.decompress(raw)
@@ -375,6 +433,9 @@ def _decode_body(raw, content_encoding, content_type=""):
             raw = zstandard.ZstdDecompressor().decompress(raw)
     except Exception:  # noqa: BLE001 - unknown/corrupt encoding: use what we got
         pass
+    if len(raw) > MAX_DECOMPRESSED_BYTES:
+        raise ValueError(
+            "decompressed payload exceeds {0} bytes; refusing".format(MAX_DECOMPRESSED_BYTES))
     match = re.search(r"charset=([\w\-]+)", content_type or "", re.I)
     for charset in ([match.group(1)] if match else []) + ["utf-8"]:
         try:
@@ -384,8 +445,14 @@ def _decode_body(raw, content_encoding, content_type=""):
     return raw.decode("utf-8", "ignore")
 
 
-def fetch_html(url, timeout=40, allow_internal=False, strict_pin=False):
-    """Fetch raw HTML with a full browser UA. Returns decoded text or raises."""
+def fetch_html(url, timeout=40, allow_internal=False, strict_pin=False,
+               max_bytes=MAX_RESPONSE_BYTES):
+    """Fetch raw HTML with a full browser UA. Returns decoded text or raises.
+
+    `max_bytes` caps the RAW body we will buffer (a body larger than that aborts
+    the fetch with a clear error instead of letting memory balloon). Decompressed
+    output is additionally bounded by MAX_DECOMPRESSED_BYTES inside _decode_body.
+    """
     headers = {
         "User-Agent": BROWSER_UA,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -395,6 +462,7 @@ def fetch_html(url, timeout=40, allow_internal=False, strict_pin=False):
     req = urllib.request.Request(url, headers=headers)
     with safe_urlopen(req, timeout=timeout, allow_internal=allow_internal,
                       strict_pin=strict_pin) as resp:
-        return _decode_body(resp.read(),
+        raw = _read_body_limited(resp, max_bytes)
+        return _decode_body(raw,
                             resp.headers.get("Content-Encoding"),
                             resp.headers.get("Content-Type"))

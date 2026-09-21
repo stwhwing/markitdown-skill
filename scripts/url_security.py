@@ -43,7 +43,15 @@ def _is_blocked_target(url, allow_internal=False):
     m = re.match(r"^([A-Za-z][A-Za-z0-9+.\-]*):", url.strip())
     if not m or m.group(1).lower() not in ("http", "https"):
         return True, "only http/https URLs are supported (scheme: %s)" % (m.group(1) if m else "none")
-    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    # Reject URLs that embed credentials (user:pass@host). Passing credentials
+    # in the URL is a classic SSRF/exfiltration trick (e.g. an attacker-supplied
+    # http://internal-user:internal-pass@public-proxy/ URL that leaks secrets to
+    # the proxy, or basic-auth creds aimed at an internal service). We never need
+    # them for public-page conversion, so refuse outright.
+    parsed = urllib.parse.urlparse(url)
+    if parsed.username is not None or parsed.password is not None:
+        return True, "URLs with embedded credentials (user:pass@host) are refused"
+    host = (parsed.hostname or "").lower()
     if not host:
         return True, "missing host"
     if host in _BLOCKED_HOST_EXACT or host.endswith(_PRIVATE_HOST_SUFFIXES):

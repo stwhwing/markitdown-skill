@@ -43,6 +43,7 @@ cuts AI token cost by 80%+.
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |
 | `references/TOKEN-SAVER.md` | Token-saving methodology & honesty notes |
 | `references/TOKEN-AUDIT.md` | Token audit methodology (optional component) |
+| `references/SECURITY.md` | Security model & threat model (SSRF, resource caps, prompt-injection boundary) |
 
 ## Requirements
 
@@ -77,11 +78,19 @@ files and links to Markdown before analysing them, and will route every web link
 ## Security
 
 - **SSRF guard (on by default).** `scripts/url_to_markdown.py` only fetches `http`/`https`
-  URLs. By default it refuses targets that resolve to loopback, private, link-local,
-  reserved, or CGNAT (`100.64.0.0/10`) addresses, the cloud instance-metadata endpoint
-  (`169.254.169.254`), or internal hostnames (`*.local`, `*.internal`, `*.corp`, `*.lan`,
-  `*.home`, `*.intranet`). Pass `--allow-internal` only on a trusted machine when you
-  deliberately need to fetch a local/intranet page.
+  URLs. By default it refuses targets that resolve to the loopback address, private address
+  space, link-local, reserved, or carrier-grade NAT ranges, the cloud instance-metadata
+  endpoint, or internal hostnames (`*.local`, `*.internal`, `*.corp`, `*.lan`, `*.home`,
+  `*.intranet`). It also refuses URLs that embed credentials (`user:pass@host`). Every redirect
+  hop is re-checked by the guard, and redirect chains longer than 10 hops are refused.
+- **Resource-exhaustion limits.** Raw responses larger than 32 MiB are rejected before being
+  buffered; gzip/deflate/br bodies are decoded with a streaming, bounded reader that aborts past
+  64 MiB of decompressed data (defeats decompression bombs).
+- **Prompt-injection boundary.** Converted text is treated as untrusted data, not instructions.
+  `url_to_markdown.py --sanitize` strips `<script>`/`<style>` blocks, neutralises
+  `javascript:`/`data:` URIs, and wraps the payload between `--- EXTERNAL CONTENT ---` markers.
+  `--manifest` records a sha256 + heuristic quality score per conversion for provenance. The
+  full threat model is in [references/SECURITY.md](references/SECURITY.md).
 - **Sandbox-first headless rendering.** The SPA fallback launches the browser with
   Chromium's sandbox enabled by default; `--no-sandbox` is only used automatically
   when running as root (where Chromium's sandbox cannot start) or when the sandboxed
