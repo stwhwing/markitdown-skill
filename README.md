@@ -1,5 +1,12 @@
 # markitdown-skill
 
+![Security](https://img.shields.io/badge/security-CLEAN-brightgreen)
+![SkillHub eval](https://img.shields.io/badge/SkillHub%20eval-4.7%2F5-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Platforms](https://img.shields.io/badge/platforms-GitHub%20%7C%20skillhub%20%7C%20ClawHub-lightgrey)
+
+**安全加固的文档/网页转 Markdown 技能**——内置 SSRF 守卫、资源上限、提示注入边界，并附带本地 token 省耗估算（云鼎安全评测 100/100「可信」）。
+
 A reusable agent skill that converts **documents and web pages** to Markdown using
 [Microsoft's MarkItDown](https://github.com/microsoft/markitdown), with two practical
 additions:
@@ -37,7 +44,7 @@ cuts AI token cost by 80%+.
 | `scripts/token_saver.py` | Local token-cost / saving estimator |
 | `scripts/measure_tokens.py` | Token counter / cost measurement for any text |
 | `scripts/batch_convert.py` | Batch file → Markdown helper |
-| `scripts/tests/test_url_fetch.py` | Regression tests for the URL fetcher (plain Python 3, no pytest needed) |
+| `scripts/tests/` | Regression tests — run all with `python scripts/tests/run_all.py` (plain Python 3, no pytest needed) |
 | `requirements.txt` | Bounded dependency spec (`pip install -r requirements.txt`) |
 | `references/reference.md` | MarkItDown API reference |
 | `references/USAGE-GUIDE.md` | Detailed CLI / API examples |
@@ -74,6 +81,37 @@ Drop this folder into your agent's skill directory (e.g. `~/.workbuddy/skills/ma
 for WorkBuddy, or your platform's equivalent). The agent will then proactively convert
 files and links to Markdown before analysing them, and will route every web link through
 `url_to_markdown.py` rather than hand-rolled `curl` + regex parsing.
+
+## Why this skill (and not just another markitdown wrapper)
+
+There are several `markitdown` skill wrappers on the marketplaces. This one is built
+around **defence-in-depth and honesty**, not just convenience:
+
+- **SSRF guard on by default** — refuses loopback / private / link-local / cloud-metadata
+  targets and credential-embedded URLs; re-checks every redirect hop.
+- **Resource caps** — 32 MiB raw / 64 MiB decompressed limits and a 10-hop redirect cap
+  defeat decompression bombs and runaway fetches (see [SECURITY.md](references/SECURITY.md)).
+- **Prompt-injection boundary** — converted text is treated as untrusted data; `--sanitize`
+  strips script/style and wraps payloads in `EXTERNAL CONTENT` markers.
+- **Sandbox-first headless rendering** — Chromium sandbox stays on unless root / restricted
+  container forces a safe fallback (never silent).
+- **Local token estimator** — `token_saver.py` reports an *honest* saving % only when a real
+  baseline exists; it never fabricates a number.
+- **Audited** — SkillHub 云鼎 (Yunding) security report: **100/100, 可信, 0 发现**; ClawHub
+  moderation: **CLEAN**.
+
+It still wraps Microsoft's MarkItDown 1:1 — the guards are additive, they don't replace the
+engine.
+
+## Install
+
+| 平台 | 命令 |
+|---|---|
+| ClawHub | `clawhub install @stwhwing/markitdown-skill` |
+| SkillHub | `skillhub install markitdown-skill --namespace indiv-stwhwing` |
+| GitHub | 下载 [Release](https://github.com/stwhwing/markitdown-skill/releases) 的 zip 解压到 agent 的 skills 目录；或 `git clone https://github.com/stwhwing/markitdown-skill.git` |
+
+WorkBuddy 用户直接把目录放到 `~/.workbuddy/skills/markitdown-skill/` 即可（详见上方 "Using it as an agent skill"）。
 
 ## Security
 
