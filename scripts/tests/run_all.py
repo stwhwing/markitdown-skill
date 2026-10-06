@@ -1,39 +1,42 @@
 #!/usr/bin/env python3
-"""Discover and run every test_*.py module in this directory (no pytest needed).
+"""Run the skill's regression test modules (no pytest needed).
 
 Usage:
     python scripts/tests/run_all.py
 Exits non-zero if any test module fails.
+
+Tests are imported statically (no dynamic exec) so the published package
+passes static-analysis scanners that flag runtime module loading.
 """
-import glob
-import importlib.util
 import os
 import sys
 
+# Tests live alongside this runner; make them importable.
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
+from test_content_detect import main as run_content_detect
+from test_token_saver import main as run_token_saver
+from test_url_fetch import main as run_url_fetch
 
-def _load(mod_path):
-    name = os.path.splitext(os.path.basename(mod_path))[0]
-    spec = importlib.util.spec_from_file_location(name, mod_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+_TESTS = [
+    ("test_url_fetch.py", run_url_fetch),
+    ("test_token_saver.py", run_token_saver),
+    ("test_content_detect.py", run_content_detect),
+]
 
 
 def main():
-    modules = sorted(glob.glob(os.path.join(_HERE, "test_*.py")))
     failed = 0
-    for mod_path in modules:
-        print("=== %s ===" % os.path.basename(mod_path))
+    for label, fn in _TESTS:
+        print("=== %s ===" % label)
         try:
-            mod = _load(mod_path)
-            if hasattr(mod, "main"):
-                failed += (mod.main() or 0)
+            failed += (fn() or 0)
         except Exception as exc:  # noqa: BLE001
             failed += 1
-            print("FAIL %s: %s" % (os.path.basename(mod_path), exc))
-    print("\n%d module(s) run; %d failed" % (len(modules), failed))
+            print("FAIL %s: %s" % (label, exc))
+    print("\n%d test(s) run; %d failed" % (len(_TESTS), failed))
     return 1 if failed else 0
 
 

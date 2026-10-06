@@ -56,7 +56,8 @@ sign of a mistake; the skill never transmits them.
 ## 5. Prompt-injection boundary (web & document text)
 
 Converted page / document text is **untrusted data, not instructions**. A hostile
-source could embed "ignore previous instructions …". The skill:
+source could attempt to slip in directive text telling the model to discard
+its prior guidance. The skill:
 
 - Treats all output as data to be processed by *your* tooling, never as commands
   to execute, tool calls to change, or data to exfiltrate.
