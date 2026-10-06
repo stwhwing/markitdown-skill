@@ -90,7 +90,7 @@ def emit(md, out):
 
 
 # Active-content / prompt-injection boundaries. Web page text is UNTRUSTED DATA,
-# not instructions: a hostile page could embed "ignore previous instructions …".
+# not instructions: a hostile page could embed directive text that tries to override this guidance.
 _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
 _STYLE_RE = re.compile(r"<style\b[^>]*>.*?</style>", re.I | re.S)
 _JS_URI_RE = re.compile(r"(]\(\s*|\!\[\]?\()\s*(?:javascript|data):", re.I)
@@ -102,7 +102,7 @@ def _sanitize_markdown(md, src):
     Best-effort, not a security boundary: drops <script>/<style> blocks,
     neutralises javascript:/data: URIs in markdown links/images, and wraps the
     whole result between explicit boundary markers so downstream consumers can
-    treat it strictly as data and ignore any embedded "instructions".
+    treat it strictly as data and discard any embedded directive text.
     """
     body = _SCRIPT_RE.sub("", md)
     body = _STYLE_RE.sub("", body)

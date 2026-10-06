@@ -31,6 +31,9 @@ except Exception:  # pragma: no cover - url_fetch always present in the package
     )
 
 
+MAX_SPA_BYTES = 16 * 1024 * 1024  # cap raw bytes read in the SPA fallback
+
+
 def extract_embedded_json(url):
     # Defense-in-depth: this module can be called directly, so re-verify the
     # target here instead of trusting the caller (--allow-internal still wins).
@@ -47,7 +50,9 @@ def extract_embedded_json(url):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": BROWSER_UA})
         opener = safe_urlopen if safe_urlopen else urllib.request.urlopen
-        raw = opener(req, timeout=30).read().decode("utf-8", "ignore")
+        # Bounded read: cap raw bytes so a hostile or oversized response cannot
+        # balloon memory (mirrors the cap on the primary fetch path).
+        raw = opener(req, timeout=30).read(MAX_SPA_BYTES).decode("utf-8", "ignore")
     except Exception as e:  # noqa: BLE001
         print(f"[spa-fallback] fetch failed: {e}", file=sys.stderr)
         return None
