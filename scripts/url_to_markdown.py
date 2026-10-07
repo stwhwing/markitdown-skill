@@ -31,7 +31,7 @@ parts live in sibling modules next to it:
   media_detect.py   — audio/video URL detection & missing-backend warnings
 
 Usage:
-  python url_to_markdown.py "https://..." [-o page.md] [--no-browser] [--force-browser]
+  python url_to_markdown.py "https://..." [-o page.md] [--browser-fallback auto|off|always]
 Run with the Python interpreter that has `markitdown` installed
 (eg. WorkBuddy managed venv: ~/.workbuddy/binaries/python/envs/default/Scripts/python.exe).
 """
@@ -159,6 +159,9 @@ EXIT_FETCH = 4       # every fetch path failed (network / proxy / DNS / anti-bot
 EXIT_CONTENT = 5     # fetched something but no meaningful content could be extracted
 EXIT_OUTPUT = 6      # could not write the output file
 
+# One-off notice flag for the browser-fallback informed-choice message.
+_BF_NOTICE_SHOWN = False
+
 
 def die(code, message, hint=None):
     print("[error] %s" % message, file=sys.stderr)
@@ -179,8 +182,16 @@ def main():
     ap = argparse.ArgumentParser(description="Convert a URL to Markdown with SPA fallback")
     ap.add_argument("url")
     ap.add_argument("-o", "--output", help="Write markdown to this file (default: stdout)")
-    ap.add_argument("--no-browser", action="store_true", help="Skip browser fallback")
-    ap.add_argument("--force-browser", action="store_true", help="Always use browser render")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="Skip browser fallback (same as --browser-fallback=off)")
+    ap.add_argument("--force-browser", action="store_true",
+                    help="Always use browser render (same as --browser-fallback=always)")
+    ap.add_argument("--browser-fallback", choices=("auto", "always", "off"), default=None,
+                    help="Informed choice for the local-browser fallback: 'auto' (default) "
+                         "renders only when direct fetch yields too little text and prints a "
+                         "one-off notice, 'off' never launches a browser, 'always' renders "
+                         "every URL. 'off' is the choice to make if you do not accept a local "
+                         "browser being started for untrusted pages.")
     ap.add_argument("--virtual-time-budget", type=int, default=8000,
                     help="Virtual time (ms) for SPA JS to run (default 8000)")
     ap.add_argument("--allow-internal", action="store_true",
@@ -194,6 +205,24 @@ def main():
     ap.add_argument("--manifest", help="Append a JSON-lines provenance/quality record "
                                        "per conversion to this file")
     args = ap.parse_args()
+
+    # --- browser-fallback: three-state informed choice ------------------------
+    # Resolved to two booleans the rest of the flow already uses. The legacy
+    # --no-browser / --force-browser flags stay supported; the explicit
+    # --browser-fallback wins when both are given, and contradicting legacy
+    # flags are rejected rather than silently resolved one way.
+    _bf = args.browser_fallback
+    if _bf is None:
+        _bf = "off" if args.no_browser else ("always" if args.force_browser else "auto")
+    elif args.no_browser and _bf != "off":
+        die(EXIT_USAGE, "--no-browser conflicts with --browser-fallback=%s" % _bf,
+            "Use either --no-browser (or --browser-fallback=off), not both.")
+    elif args.force_browser and _bf != "always":
+        die(EXIT_USAGE, "--force-browser conflicts with --browser-fallback=%s" % _bf,
+            "Use either --force-browser (or --browser-fallback=always), not both.")
+    args.browser_fallback = _bf
+    args.no_browser = (_bf == "off")
+    args.force_browser = (_bf == "always")
 
     # SSRF guard — refuse internal/private targets before any fetch/render.
     blocked, reason = _is_blocked_target(args.url, args.allow_internal)
@@ -264,6 +293,18 @@ def main():
     browser = None if args.no_browser else find_browser()
     fallback_md = ""
     if browser:
+        if args.browser_fallback == "auto":
+            # Informed choice: tell the user a local browser is being started for
+            # an untrusted page, and how to opt out. One-off per process.
+            global _BF_NOTICE_SHOWN
+            if not _BF_NOTICE_SHOWN:
+                _BF_NOTICE_SHOWN = True
+                print("[browser-fallback] direct fetch returned too little text, so a local "
+                      "headless browser will render this untrusted page. Its main request "
+                      "still goes through the SSRF guard and address pinning, but the page's "
+                      "own sub-resources are not filtered per-request. Pass "
+                      "--browser-fallback=off to never launch a browser.",
+                      file=sys.stderr)
         html = render_with_browser(args.url, browser, args.virtual_time_budget,
                                    allow_internal=args.allow_internal)
         if html:
