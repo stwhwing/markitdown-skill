@@ -1,8 +1,11 @@
-# MarkItDown API Reference
+# MarkItDown API Reference / MarkItDown API 参考
 
-## MarkItDown Class
+> 本文档标题与说明性文字提供中英双语；代码与 API 名称为通用写法，保持英文。
+> Headings and prose in this document are bilingual; code and API names follow the universal (English) convention.
 
-### Constructor
+## MarkItDown Class / MarkItDown 类
+
+### Constructor / 构造函数
 
 ```python
 class MarkItDown:
@@ -42,7 +45,7 @@ md = MarkItDown(llm_client=client, llm_model="gpt-4o")
 md = MarkItDown(docintel_endpoint="https://your-endpoint.cognitiveservices.azure.com/")
 ```
 
-### convert() Method
+### convert() Method / convert() 方法
 
 ```python
 def convert(
@@ -73,7 +76,7 @@ with open("document.pdf", "rb") as f:
 print(result.text_content)
 ```
 
-### convert_stream() Method
+### convert_stream() Method / convert_stream() 方法
 
 ```python
 def convert_stream(
@@ -99,7 +102,7 @@ data = io.BytesIO(pdf_bytes)
 result = md.convert_stream(data, file_extension=".pdf")
 ```
 
-## ConversionResult
+## ConversionResult / 转换结果
 
 ```python
 class ConversionResult:
@@ -109,7 +112,7 @@ class ConversionResult:
 **Attributes:**
 - `text_content` (str): The converted markdown content
 
-## CLI Usage
+## CLI Usage / CLI 用法
 
 ### Basic Commands
 
@@ -133,7 +136,7 @@ markitdown --use-plugins <file>
 markitdown <file> -d -e <endpoint>  # Azure Doc Intelligence
 ```
 
-## Format-Specific Details
+## Format-Specific Details / 各格式详情
 
 ### PDF
 - **Best for:** Text-based PDFs
@@ -185,13 +188,13 @@ markitdown <file> -d -e <endpoint>  # Azure Doc Intelligence
 - **Extracts:** eBook content
 - **No extra dependencies**
 
-## Environment Requirements
+## Environment Requirements / 环境要求
 
-### Python Version
+### Python Version / Python 版本
 - **Required:** Python 3.10 or higher
 - **Recommended:** Python 3.12
 
-### Virtual Environment (Recommended)
+### Virtual Environment (Recommended) / 虚拟环境（推荐）
 
 ```bash
 # Standard Python
@@ -207,7 +210,7 @@ conda create -n markitdown python=3.12
 conda activate markitdown
 ```
 
-### System Dependencies
+### System Dependencies / 系统依赖
 
 **`exiftool`** (optional, for image EXIF metadata):
 ```bash
@@ -237,7 +240,7 @@ brew install ffmpeg
 - Plus the `ffmpeg` binary above
 - Check: https://github.com/Uberi/speech_recognition
 
-## Azure Document Intelligence
+## Azure Document Intelligence / Azure 文档智能
 
 For high-quality PDF conversion with complex layouts:
 
@@ -260,15 +263,15 @@ md = MarkItDown(docintel_endpoint="<endpoint>")
 result = md.convert("document.pdf")
 ```
 
-### More Info
+### More Info / 更多信息
 https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/
 
-## Plugin System
+## Plugin System / 插件系统
 
-### Finding Plugins
+### Finding Plugins / 查找插件
 Search GitHub for: `#markitdown-plugin`
 
-### Using Plugins
+### Using Plugins / 使用插件
 
 **CLI:**
 ```bash
@@ -281,12 +284,12 @@ markitdown --use-plugins file.pdf
 md = MarkItDown(enable_plugins=True)
 ```
 
-### Creating Plugins
+### Creating Plugins / 创建插件
 See: `packages/markitdown-sample-plugin` in the repository
 
-## Error Handling
+## Error Handling / 错误处理
 
-### Common Issues
+### Common Issues / 常见问题
 
 **Missing dependencies:**
 ```python
@@ -313,7 +316,7 @@ except Exception as e:
     print(f"Conversion failed: {e}")
 ```
 
-## Performance Tips
+## Performance Tips / 性能建议
 
 1. **Batch processing:** Reuse MarkItDown instance
 2. **Large files:** Consider chunking or streaming
@@ -321,7 +324,7 @@ except Exception as e:
 4. **Audio:** Expect real-time or slower transcription
 5. **Azure Doc Intel:** Best for complex PDFs, costs apply
 
-## Output Format Notes
+## Output Format Notes / 输出格式说明
 
 - **Goal:** LLM-friendly markdown, not pixel-perfect reproduction
 - **Structure:** Preserves headings, lists, tables, links
@@ -330,9 +333,9 @@ except Exception as e:
 - **Styling:** Bold, italic preserved when possible
 - **Layout:** Linear document structure (no multi-column preservation)
 
-## Integration Examples
+## Integration Examples / 集成示例
 
-### LangChain Document Loader
+### LangChain Document Loader / LangChain 文档加载器
 
 ```python
 from markitdown import MarkItDown
@@ -348,7 +351,7 @@ def load_document(file_path):
     )
 ```
 
-### LlamaIndex Document
+### LlamaIndex Document / LlamaIndex 文档
 
 ```python
 from markitdown import MarkItDown
@@ -361,7 +364,7 @@ def create_llama_doc(file_path):
     return Document(text=result.text_content)
 ```
 
-### FastAPI Endpoint
+### FastAPI Endpoint / FastAPI 端点
 
 ```python
 from fastapi import FastAPI, UploadFile
@@ -377,7 +380,7 @@ async def convert_file(file: UploadFile):
     return {"markdown": result.text_content}
 ```
 
-## 数据安全提示（API 参数索引）
+## 数据安全提示（API 参数索引）/ Data-security notes (API parameter index)
 
 会向外部端点传出内容的 API 参数一览（**均默认关闭**）：
 
@@ -387,9 +390,9 @@ async def convert_file(file: UploadFile):
 | `docintel_endpoint` | Azure Document Intelligence | 你的 Azure 端点 |
 | `enable_plugins=True` | 第三方插件 | 取决于插件实现 |
 
-> **启用规则与决策表不在此重复**：决策依据见 **SKILL.md §🔒 隐私与数据流向**，各能力的具体参数与代码见 **USAGE-GUIDE.md §隐私与数据安全**；SSRF 防护见 SKILL.md「⚠️ 安全边界」。
+> **启用规则与决策表不在此重复**：决策依据（含本私有版内置的可选 token 节省上报）见 **SKILL.md §🔒 隐私与数据流向**，各能力的具体参数与代码见 **USAGE-GUIDE.md §隐私与数据安全**；SSRF 防护见 SKILL.md「⚠️ 安全边界」。
 
-## Breaking Changes (v0.0.1 → v0.1.0)
+## Breaking Changes (v0.0.1 → v0.1.0) / 破坏性变更（v0.0.1 → v0.1.0）
 
 1. **Dependencies:** Now organized into feature groups
    - Use `pip install 'markitdown[all]'` for backward compatibility
@@ -401,7 +404,7 @@ async def convert_file(file: UploadFile):
    - No temporary files created anymore
    - Plugin authors need to update code
 
-## Resources
+## Resources / 资源
 
 - **GitHub:** https://github.com/microsoft/markitdown
 - **PyPI:** https://pypi.org/project/markitdown/
