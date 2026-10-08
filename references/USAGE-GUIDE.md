@@ -1,10 +1,13 @@
-# MarkItDown Usage Guide
+# MarkItDown Usage Guide / MarkItDown 使用指南
+
+> 本文档标题与说明性文字提供中英双语；代码与 API 名称为通用写法，保持英文。
+> Headings and prose in this document are bilingual; code and API names follow the universal (English) convention.
 
 Detailed examples and patterns for document conversion.
 
-## CLI Usage
+## CLI Usage / CLI 用法
 
-### Basic Conversion
+### Basic Conversion / 基础转换
 
 ```bash
 # To stdout
@@ -17,7 +20,7 @@ markitdown document.pdf -o output.md
 cat document.pdf | markitdown > output.md
 ```
 
-### Web Content
+### Web Content / 网页内容
 
 ```bash
 # Fetch and convert URL
@@ -27,7 +30,7 @@ markitdown https://example.com/docs -o docs.md
 markitdown https://raw.githubusercontent.com/user/repo/main/README.md
 ```
 
-### Batch Processing
+### Batch Processing / 批量处理
 
 ```bash
 # Convert all PDFs
@@ -54,9 +57,9 @@ markitdown file.pdf -d -e "<endpoint>" -o output.md
 
 ---
 
-## Python API
+## Python API / Python API
 
-### Basic Usage
+### Basic Usage / 基础用法
 
 ```python
 from markitdown import MarkItDown
@@ -66,7 +69,7 @@ result = md.convert("document.pdf")
 print(result.text_content)
 ```
 
-### With LLM Image Descriptions
+### With LLM Image Descriptions / 配合 LLM 图像描述
 
 ```python
 from markitdown import MarkItDown
@@ -82,7 +85,7 @@ result = md.convert("image.jpg")
 print(result.text_content)
 ```
 
-### Azure Document Intelligence
+### Azure Document Intelligence / Azure 文档智能
 
 ```python
 from markitdown import MarkItDown
@@ -92,7 +95,7 @@ result = md.convert("complex-layout.pdf")
 print(result.text_content)
 ```
 
-### Batch Processing
+### Batch Processing / 批量处理
 
 ```python
 from markitdown import MarkItDown
@@ -106,7 +109,7 @@ for pdf_file in Path("docs/").glob("*.pdf"):
     output_path.write_text(result.text_content)
 ```
 
-### Error Handling
+### Error Handling / 错误处理
 
 ```python
 from markitdown import MarkItDown
@@ -125,9 +128,9 @@ except Exception as e:
 
 ---
 
-## Format-Specific Examples
+## Format-Specific Examples / 按格式示例
 
-### PDF Documents
+### PDF Documents / PDF 文档
 
 ```bash
 # Simple extraction
@@ -137,7 +140,7 @@ markitdown document.pdf -o document.md
 markitdown document.pdf -d -e "<endpoint>" -o document.md
 ```
 
-### PowerPoint Presentations
+### PowerPoint Presentations / PowerPoint 演示文稿
 
 ```bash
 markitdown presentation.pptx -o slides.md
@@ -150,7 +153,7 @@ md = MarkItDown(llm_client=OpenAI(), llm_model="gpt-4o")
 result = md.convert("presentation.pptx")
 ```
 
-### Excel Spreadsheets
+### Excel Spreadsheets / Excel 表格
 
 ```bash
 markitdown spreadsheet.xlsx -o data.md
@@ -165,7 +168,7 @@ Output format:
 | Data 1   | Data 2   | Data 3   |
 ```
 
-### Images (metadata / LLM description)
+### Images (metadata / LLM description) / 图片（元数据 / LLM 描述）
 
 ```bash
 # 默认只输出 EXIF 元数据；需系统装 exiftool（可选）
@@ -176,21 +179,21 @@ markitdown photo.jpg -o photo.md
 > 装 tesseract 也不会生效。要读图取字请二选一：① 配置多模态 LLM 做图像描述；
 > ② 用 Azure Document Intelligence 做服务端 OCR。详见 SKILL.md「图片转不出文字（不是 OCR 工具没装）」。
 
-### Audio Transcription
+### Audio Transcription / 音频转写
 
 ```bash
 pip install 'markitdown[audio-transcription]'
 markitdown recording.mp3 -o transcript.md
 ```
 
-### YouTube Videos
+### YouTube Videos / YouTube 视频
 
 ```bash
 pip install 'markitdown[youtube-transcription]'
 markitdown "https://youtube.com/watch?v=VIDEO_ID" -o transcript.md
 ```
 
-### ZIP Archives
+### ZIP Archives / ZIP 归档
 
 ```bash
 # Iterates over all files inside
@@ -199,9 +202,9 @@ markitdown archive.zip -o contents.md
 
 ---
 
-## Integration Patterns
+## Integration Patterns / 集成模式
 
-### LLM Document Analysis
+### LLM Document Analysis / LLM 文档分析
 
 ```python
 from markitdown import MarkItDown
@@ -224,7 +227,7 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-### RAG Pipeline
+### RAG Pipeline / RAG 流水线
 
 ```python
 from markitdown import MarkItDown
@@ -243,7 +246,7 @@ for file in ["doc1.pdf", "doc2.docx", "doc3.pptx"]:
 # Feed to vector database...
 ```
 
-### LangChain Integration
+### LangChain Integration / LangChain 集成
 
 ```python
 from markitdown import MarkItDown
@@ -259,7 +262,7 @@ def load_document(file_path):
     )
 ```
 
-### FastAPI Endpoint
+### FastAPI Endpoint / FastAPI 端点
 
 ```python
 from fastapi import FastAPI, UploadFile
@@ -277,9 +280,9 @@ async def convert_file(file: UploadFile):
 
 ---
 
-## 隐私与数据安全（各外部能力的具体参数）
+## 隐私与数据安全（各外部能力的具体参数）/ Privacy & data security (per-capability parameters)
 
-> **先决策、再查参数**：「该不该用某个外部能力」的决策表与三条硬规则见 **SKILL.md §🔒 隐私与数据流向**（权威处，只在那里完整展开一次）。本节只给出各能力的**具体启用参数与代码**，不重复决策规则。
+> **先决策、再查参数**：「该不该用某个外部能力」的决策表与三条硬规则（含本私有版的 token 节省上报）见 **SKILL.md §🔒 隐私与数据流向**（权威处，只在那里完整展开一次）。本节只给出各能力的**具体启用参数与代码**，不重复决策规则。
 
 下列能力在启用时会把内容发送到**外部服务**（**默认关闭**；启用前须取得用户**明确同意**，且**不要**用于内部 / 私有 / 涉密文档）：
 
@@ -290,14 +293,14 @@ async def convert_file(file: UploadFile):
 
 > SSRF 防护（URL 转换器默认拒绝内网 / 私有地址）见 SKILL.md「⚠️ 安全边界」一节。
 
-## Performance Tips
+## Performance Tips / 性能建议
 
 1. **Reuse MarkItDown instance** for batch processing
 2. **Reduce image resolution** if LLM image-description speed matters
 3. **Use Azure Document Intelligence** for complex PDF layouts
 4. **Audio transcription** is roughly real-time
 
-## Output Format
+## Output Format / 输出格式
 
 MarkItDown preserves:
 - Headings (H1-H6)
