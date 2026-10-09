@@ -21,6 +21,20 @@ def meaningful_len(text):
     return len(t)
 
 
+# Real-content vs boilerplate detection (replaces the bare >=120 short-circuit)
+# ---------------------------------------------------------------------------
+# UI / navigation / footer tokens that, when they dominate the output, indicate
+# we captured chrome instead of the article body.
+_BOILERPLATE_TOKENS = {
+    "取消", "允许", "赞", "在看", "分享", "收藏", "留言", "听过", "首页", "登录",
+    "注册", "退出", "个人中心", "我的", "消息", "动态", "历史", "投稿", "创作中心",
+    "下载客户端", "关注", "取消关注", "扫一扫", "微信扫一扫", "知道了", "去阅读",
+    "视频", "小程序", "直播", "番剧", "会员", "大会员", "漫画", "赛事", "客服",
+    "帮助", "设置", "更多", "展开", "收起", "返回", "导航", "菜单", "搜索",
+    "立即下载", "打开", "关闭", "小说",
+}
+
+
 # We measure VISIBLE text only — markdown image/link/URL lines (e.g.
 # `![](https://...)`) are long but carry no body, so they are stripped before
 # any check. The detector then distinguishes real body prose from nav/footer/UI

@@ -30,6 +30,11 @@ parts live in sibling modules next to it:
   spa_extract.py    — embedded-JSON flattening + WeChat article extraction
   media_detect.py   — audio/video URL detection & missing-backend warnings
 
+PRIVATE BUILD NOTE: this copy additionally reports the token saving of each
+conversion via `finish()` -> `_emit_saving()` (best effort, never fatal).
+Set SAVINGS_URL= (empty) to disable reporting. The public build (qclaw) uses
+the same logic with `emit()` instead of `finish()` and omits reporting.
+
 Usage:
   python url_to_markdown.py "https://..." [-o page.md] [--browser-fallback auto|off|always]
 Run with the Python interpreter that has `markitdown` installed
@@ -89,6 +94,68 @@ def emit(md, out):
         sys.stdout.write(md)
 
 
+# ---------------------------------------------------------------------------
+# token savings reporting (best effort; never fatal) — PRIVATE BUILD ONLY
+# ---------------------------------------------------------------------------
+_RAW_HTML_LEN = 0  # 最近一次拿到的原始 HTML 字符数，用作节省量基线
+
+# 上报门槛（**只影响上报**；转换输出、退出码、落盘文件一律不受影响）
+# 诚实口径：只有"确实抓到了正文"才值得上报节省量。以下两种一律不上报：
+#   1) 正文过短 —— 没抓到内容（反爬页 / SPA 空壳 / 仅页眉页脚）；
+#   2) 命中反爬 / 验证页特征 —— 明确是被拦截页。
+# 2026-09-13 实测教训：一篇微信文章被反爬返回"环境异常"页（约 177B），md 仅
+# 22 token，旧实现仍上报 saved=5770 / 99.6%，且同一 URL 短时重复 5 笔。
+MIN_REPORT_CHARS = 200
+
+# 反爬 / 验证页特征（集中在此便于维护；新增特征只改这一处）
+CHALLENGE_PAGE_PATTERNS = re.compile(
+    r"环境异常"
+    r"|去验证"
+    r"|完成验证后即可继续访问"
+    r"|请完成验证"
+    r"|访问过于频繁"
+    r"|Just a moment"
+    r"|Checking your browser"
+    r"|Enable JavaScript and cookies"
+    r"|Attention Required",
+    re.IGNORECASE,
+)
+
+
+def _emit_saving(url, md):
+    """把本次转换省下的 token 量上报 自部署的接收端。任何异常一律静默忽略。
+
+    门槛见 MIN_REPORT_CHARS / CHALLENGE_PAGE_PATTERNS；门槛只决定"要不要
+    上报"，不改变转换输出、退出码或已写出的文件。
+    """
+    try:
+        text = md or ""
+        if len(text) < MIN_REPORT_CHARS:
+            print("[savings] skipped: output too short (<%d chars)" % MIN_REPORT_CHARS,
+                  file=sys.stderr)
+            return
+        if CHALLENGE_PAGE_PATTERNS.search(text):
+            print("[savings] skipped: blocked/challenge page detected", file=sys.stderr)
+            return
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import report_savings
+        report_savings.report(
+            source_file=url,
+            source_type="html",
+            raw_tokens=report_savings.estimate_tokens_from_chars(_RAW_HTML_LEN),
+            md_tokens=report_savings.estimate_tokens(text),
+            basis="html source (chars/4)" if _RAW_HTML_LEN else "none",
+        )
+    except Exception:
+        pass
+
+
+def finish(md, url, out):
+    """统一出口：先原子写入 Markdown，再（静默）上报本次转换的节省量。"""
+    emit(md, out)
+    _emit_saving(url, md)
+
+
 # Active-content / prompt-injection boundaries. Web page text is UNTRUSTED DATA,
 # not instructions: a hostile page could embed directive text that tries to override this guidance.
 _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
@@ -134,10 +201,14 @@ def _write_manifest(path, record):
 
 
 def deliver(md, url, out, manifest_path=None, sanitize=False):
-    """Sanitize (opt), write atomically, and append a provenance manifest record."""
+    """Sanitize (opt), write atomically, and append a provenance manifest record.
+
+    Private build: the atomic write goes through `finish()` so the optional
+    token-saving report is still emitted; the public build uses `emit()`.
+    """
     if sanitize:
         md = _sanitize_markdown(md, url)
-    emit(md, out)
+    finish(md, url, out)
     if manifest_path:
         rec = {
             "source": url,
@@ -179,6 +250,7 @@ def _ocr_hint():
 
 
 def main():
+    global _RAW_HTML_LEN  # 记录本次实际喂给 markitdown 的原始 HTML 字符数（节省量基线）
     ap = argparse.ArgumentParser(description="Convert a URL to Markdown with SPA fallback")
     ap.add_argument("url")
     ap.add_argument("-o", "--output", help="Write markdown to this file (default: stdout)")
@@ -207,7 +279,7 @@ def main():
     args = ap.parse_args()
 
     # --- browser-fallback: three-state informed choice ------------------------
-    # Resolved to two booleans the rest of the flow already uses. The legacy
+    # Resolved to the two booleans the rest of the flow already uses. The legacy
     # --no-browser / --force-browser flags stay supported; the explicit
     # --browser-fallback wins when both are given, and contradicting legacy
     # flags are rejected rather than silently resolved one way.
@@ -252,6 +324,7 @@ def main():
         try:
             raw = fetch_html(args.url, allow_internal=args.allow_internal,
                              strict_pin=args.strict_pin)
+            _RAW_HTML_LEN = len(raw)
             # WeChat articles: extract title / account / publish time plus the
             # #js_content body directly, instead of the whole ~3 MB shell.
             wx = extract_wechat_article(raw)
@@ -308,6 +381,7 @@ def main():
         html = render_with_browser(args.url, browser, args.virtual_time_budget,
                                    allow_internal=args.allow_internal)
         if html:
+            _RAW_HTML_LEN = os.path.getsize(html)  # 渲染后 DOM 才是真正喂给 markitdown 的内容
             res = run_markitdown_on_file(html)
             md = res.stdout or ""
             try:

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Token-cost estimator for the MarkItDown skill.
+Token-Saving helper for the MarkItDown skill.
 
-Converts a document to Markdown via markitdown and reports the approximate token cost
-the AI actually pays for the cleaned Markdown. It can ALSO estimate a saving %, but ONLY
-when a real raw baseline is available:
+Converts a document to Markdown via markitdown and reports the token cost the AI actually
+pays for the cleaned Markdown. It can ALSO estimate a saving %, but ONLY when a real raw
+baseline is available (and the converted Markdown must contain real text — an output
+shorter than content_detect's TEXT_THRESHOLD means the extraction failed, and no saving
+is claimed):
 
   - text-like files (.txt/.md/.csv/.json/...)  -> baseline = source text / 4 (meaningful)
   - PDF / images                               -> pass --pages N  (baseline = N * 1500, estimate)
@@ -14,34 +16,27 @@ For compressed binary formats (.pdf/.docx/.pptx/.xlsx/...) WITHOUT a baseline, t
 does NOT fabricate a saving — it just reports the Markdown token cost, because the AI
 cannot ingest the raw binary anyway (Markdown is the only practical input).
 
-A baseline alone is still not enough: the converted Markdown must also contain real text.
-If the output is shorter than content_detect's TEXT_THRESHOLD (a failed / anti-bot /
-empty-shell extraction), the script reports no saving instead of a fictitious one.
-
 All token counts use a chars/4 heuristic and are APPROXIMATE (order-of-magnitude), not bills.
 
+Reporting to 自部署的接收端 (POST /api/savings):
+  --report     best-effort auto push (spool-then-flush, agent auto-detected). Never fails
+               the conversion. Safe even when the dashboard tunnel is down (data is spooled
+               and flushed later, e.g. when the WorkBuddy dashboard script opens).
+  --emit-json  print one JSON line (no human text) for manual piping to the dashboard POST.
+  --agent      override the agent tag (openclaw / hermes / workbuddy). Optional; omitted =>
+               auto-detected from this script's path.
+
 Usage:
-  python token_saver.py INPUT [-o OUTPUT.md] [--pages N] [--raw-estimate N]
+  python token_saver.py INPUT [-o OUTPUT.md] [--pages N] [--raw-estimate N] [--report]
 """
 import sys
+import os
 import json
 import argparse
 from pathlib import Path
 
 # Rough tokens per dense page for PDF/image estimation (heuristic only).
 PAGE_TOKENS = 1500
-
-# "Did we actually get content?" threshold, reused from content_detect (shipped in the
-# same package) so the two never drift; fallback is the same value. Output shorter than
-# this means the conversion produced no real text (anti-bot / empty-shell page), and a
-# "saving" would be fiction — see the docstring note on honest accounting.
-try:  # pragma: no cover - content_detect ships with this package
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from content_detect import TEXT_THRESHOLD as _MIN_REAL_CHARS
-except Exception:  # noqa: BLE001
-    _MIN_REAL_CHARS = 120
-
-MIN_REAL_CONTENT_TOKENS = max(1, -(-_MIN_REAL_CHARS // 4))
 
 
 def estimate_tokens(text: str) -> int:
@@ -65,6 +60,23 @@ def main() -> int:
         "--pages",
         type=int,
         help="For PDF/images: estimate raw baseline as pages * %d tokens." % PAGE_TOKENS,
+    )
+    ap.add_argument(
+        "--agent",
+        default=None,
+        help="Agent tag for the savings dashboard (openclaw / hermes / workbuddy). "
+        "Optional; auto-detected from this script's path when omitted.",
+    )
+    ap.add_argument(
+        "--emit-json",
+        action="store_true",
+        help="Emit one JSON line (no human text) for piping to the savings dashboard POST.",
+    )
+    ap.add_argument(
+        "--report",
+        action="store_true",
+        help="Also push the token-cost/saving record to 自部署的接收端 (best effort; "
+        "never fails the conversion). Spool-then-flush so it survives a missing tunnel.",
     )
     args = ap.parse_args()
 
@@ -118,24 +130,51 @@ def main() -> int:
         raw_tokens = max(1, args.pages * PAGE_TOKENS)
         basis = f"--pages {args.pages} * {PAGE_TOKENS} (estimate)"
 
-    # --- Compute saving (honest; needs a real baseline AND real output) ---
-    # A baseline alone is not enough: if the Markdown is too short to be content, the
-    # extraction failed and no saving may be claimed (raw HTML may still be large).
-    content_ok = md_tokens >= MIN_REAL_CONTENT_TOKENS
-    saved_tokens = max(0, (raw_tokens - md_tokens)) if (raw_tokens and content_ok) else 0
+    # --- Compute saving (honest; only when a real baseline exists) ---
+    saved_tokens = max(0, (raw_tokens - md_tokens)) if raw_tokens else 0
     saved_pct = (
         max(0.0, (raw_tokens - md_tokens)) / raw_tokens * 100
-    ) if (raw_tokens and content_ok) else 0.0
+    ) if raw_tokens else 0.0
+
+    # --- 诚实口径「门二」：产出过短 => 视为抓取失败，不宣称节省 ---
+    # 阈值与 report_savings 同源（复用 content_detect.TEXT_THRESHOLD），避免两处口径漂移。
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import report_savings as _rs
+        _min_tok = _rs.MIN_REAL_CONTENT_TOKENS
+    except Exception:  # noqa: BLE001 - 极端情况下按下限兜底
+        _min_tok = 30
+    content_ok = md_tokens >= _min_tok
+    suspect = bool(raw_tokens) and not content_ok
+    if suspect:
+        saved_tokens, saved_pct = 0, 0.0
+
+    # --- Machine-readable output (for the savings dashboard) ---
+    if args.emit_json:
+        rec = {
+            "agent": args.agent or "unknown",
+            "source_file": input_path.name,
+            "source_type": (ext or "unknown").lstrip("."),
+            "raw_tokens": int(raw_tokens or 0),
+            "md_tokens": int(md_tokens),
+            "saved_tokens": int(saved_tokens),
+            "saved_pct": round(saved_pct, 1),
+            "basis": basis or "none",
+        }
+        if suspect:
+            rec["quality"] = "suspect"
+        print(json.dumps(rec, ensure_ascii=False))
+        return 0
 
     # --- Human-readable report ---
     print("--- Token cost (approximate) ---")
     print(f"Source           : {input_path.name} ({ext or 'unknown'})")
     print(f"Markdown tokens  : {md_tokens:,}   (actual AI cost)")
-    if raw_tokens and not content_ok:
+    if raw_tokens and suspect:
         print(f"Raw baseline     : {raw_tokens:,}   ({basis})")
         print("Estimated saving : n/a — output too short to be real content")
-        print(f"  ({md_tokens} md tokens < {MIN_REAL_CONTENT_TOKENS}; the extraction likely")
-        print("   failed, e.g. an anti-bot / empty-shell page, so no saving is claimed.)")
+        print(f"  ({md_tokens} md tokens < {_min_tok}; the extraction likely failed,")
+        print("   e.g. an anti-bot / empty-shell page, so no saving is claimed.)")
     elif raw_tokens:
         print(f"Raw baseline     : {raw_tokens:,}   ({basis})")
         print(f"Estimated saving : {saved_pct:.1f}%")
@@ -145,6 +184,23 @@ def main() -> int:
         print("  it is fed the Markdown above. For a saving estimate, re-run with")
         print("  --pages N (PDF/images) or --raw-estimate N.")
     print("Note: heuristic chars/4; CJK text differs. Numbers are order-of-magnitude.")
+
+    # --- Optional: push to 自部署的接收端 (best effort) ---
+    if args.report:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import report_savings
+            report_savings.report(
+                source_file=str(input_path),
+                source_type=ext or "file",
+                raw_tokens=raw_tokens or 0,
+                md_tokens=md_tokens,
+                basis=basis or "none",
+                agent=args.agent,
+            )
+            print("[token_saver] 已（尝试）上报节省量至 自部署的接收端")
+        except Exception as e:  # noqa: BLE001
+            print(f"[token_saver] 上报被跳过（不影响转换结果）: {e}", file=sys.stderr)
 
     return 0
 

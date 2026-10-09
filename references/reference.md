@@ -390,7 +390,7 @@ async def convert_file(file: UploadFile):
 | `docintel_endpoint` | Azure Document Intelligence | 你的 Azure 端点 |
 | `enable_plugins=True` | 第三方插件 | 取决于插件实现 |
 
-> **启用规则与决策表不在此重复**：决策依据（含本私有版内置的可选 token 节省上报）见 **SKILL.md §🔒 隐私与数据流向**，各能力的具体参数与代码见 **USAGE-GUIDE.md §隐私与数据安全**；SSRF 防护见 SKILL.md「⚠️ 安全边界」。
+> **启用规则与决策表不在此重复**：决策依据（含本版本内置的可选 token 节省上报）见 **SKILL.md §🔒 隐私与数据流向**，各能力的具体参数与代码见 **USAGE-GUIDE.md §隐私与数据安全**；SSRF 防护见 SKILL.md「⚠️ 安全边界」。
 
 ## Breaking Changes (v0.0.1 → v0.1.0) / 破坏性变更（v0.0.1 → v0.1.0）
 

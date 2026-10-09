@@ -92,6 +92,10 @@ def markitdown_cmd():
     return [sys.executable, "-m", "markitdown"]
 
 
+def run_markitdown_on_url(url):
+    return subprocess.run(markitdown_cmd() + [url], capture_output=True, text=True)
+
+
 def run_markitdown_on_file(html_path):
     return subprocess.run(markitdown_cmd() + [html_path], capture_output=True, text=True)
 
