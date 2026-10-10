@@ -111,20 +111,23 @@ knowledge base.
 - The **default conversion path is fully local**: documents and web pages become
   Markdown on your machine; only the target URL itself is fetched over the
   network. Nothing is uploaded.
-- The **public build ships no telemetry or reporting component.**
+- Token-saving reporting (`report_savings.py`) is **strictly opt-in**: with
+  `SAVINGS_URL` unset (the default), the package makes **zero network requests
+  beyond fetching the target URL itself** — nothing is sent anywhere, not even
+  to localhost.
 - Optional external capabilities — LLM image description (`--llm-model`), Azure
   Document Intelligence (`--docintel-endpoint`), and third-party plugins
   (`--use-plugins`) — send content to the endpoint you configure. They are **off
   by default** and require explicit consent before use. Do not point them at
   controlled / private / sensitive material.
-- Internal builds may optionally emit aggregate token-saving statistics to a
-  self-hosted endpoint (opt-out, statistics only, never document text); this is
-  **not** part of the published package.
+- Only when `SAVINGS_URL` **is explicitly set** does the package push aggregate
+  token-saving statistics to that self-hosted endpoint (opt-in, statistics
+  only, never document text).
 
 - **默认转换路径完全本地**：文档与网页在你的机器上转为 Markdown；仅目标 URL 本身经网络抓取，无任何上传。
-- **公开版不含任何遥测或上报组件。**
+- **上报（`report_savings.py`）为严格 opt-in**：未设置 `SAVINGS_URL`（默认）时，除抓取目标 URL 本身外**零网络请求**——任何数据不发送到任何地方（包括本机回环）。
 - 可选外部能力——LLM 图像描述（`--llm-model`）、Azure 文档智能（`--docintel-endpoint`）、三方插件（`--use-plugins`）——会把内容发往你配置的端点。它们**默认关闭**，使用前需显式授权。切勿将其指向受控 / 私有 / 敏感材料。
-- 内部构建可选择性地向自托管端点发送聚合的 token 节省统计（可退出，仅统计，绝不含文档文本）；这**不属于**公开发布包。
+- 仅当**显式设置** `SAVINGS_URL` 后，才会向该自托管端点推送聚合的 token 节省统计（opt-in，仅统计，绝不含文档文本）。
 
 ## 8. Browser sandbox / 8. 浏览器沙箱
 

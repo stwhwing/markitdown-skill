@@ -37,7 +37,8 @@ report_savings.py — Token 节省量「计算 + 落盘 + 上报」共用模块�
 
 环境变量（可选覆盖）
 --------------------
-  SAVINGS_URL     上报地址，默认 http://127.0.0.1:8088/api/savings
+  SAVINGS_URL     上报地址（严格 opt-in）：未设置 = 完全禁用（默认零请求，含回环）；
+                  显式设置为你的自部署接收端才启用；设为空 / off / none / disabled = 禁用
   SAVINGS_AGENT   强制指定 agent（openclaw / hermes / workbuddy）
   SAVINGS_SPOOL   强制指定 spool 文件路径
 
@@ -62,7 +63,8 @@ import tempfile
 import urllib.request
 
 ALLOWED_AGENTS = ("workbuddy", "openclaw", "hermes")
-DEFAULT_URL = "http://127.0.0.1:8088/api/savings"
+# v1.8.9 起上报为严格 opt-in：历史默认地址已移除——未设置 SAVINGS_URL 即完全禁用，
+# 零网络请求（含本机回环）；仅显式设置 SAVINGS_URL 指向自部署接收端才启用。
 DEFAULT_TIMEOUT = 3  # 秒；接收端在本机时应秒回，不可达时 rapid-fail
 
 TOKENS_PER_CHAR = 4  # 与 token_saver.py 一致的 chars/4 启发式
@@ -124,23 +126,23 @@ def spool_path(agent=""):
     return os.path.join(tempfile.gettempdir(), "savings_spool.jsonl")
 
 
-# 显式关闭语义：空串 / off / none / disabled（大小写不敏感）一律关闭上报；
-# 未设置回退默认地址（向后兼容）；正常 URL 覆盖默认。
+# 上报为严格 opt-in：未设置 SAVINGS_URL 时完全禁用（默认零网络请求，含本机回环）；
+# 显式设置正常 URL 才启用；空串 / off / none / disabled（大小写不敏感）一律关闭。
 _DISABLE_KEYWORDS = ("off", "none", "disabled")
 DISABLED = object()  # report() 在关闭时返回的哨兵，区别于 None（agent 非法）
 
 
 def api_url():
-    """解析上报地址。
+    """解析上报地址（v1.8.9 起默认禁用：未设置 = 完全不上报）。
 
     返回:
-      - 默认地址  : 未设置 SAVINGS_URL（向后兼容，现网行为不变）
-      - None      : 显式关闭（空串 / off / none / disabled）→ 不 POST、不写 spool
-      - 正常 URL  : 覆盖默认（现行为不变）
+      - None      : 未设置 SAVINGS_URL（默认，零请求含回环）或显式关闭
+                    （空串 / off / none / disabled）→ 不 POST、不写 spool
+      - 正常 URL  : 仅当显式设置 SAVINGS_URL（opt-in）时启用
     """
     raw = os.environ.get("SAVINGS_URL")
     if raw is None:
-        return DEFAULT_URL
+        return None
     v = raw.strip()
     if v == "" or v.lower() in _DISABLE_KEYWORDS:
         return None

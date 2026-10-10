@@ -30,10 +30,10 @@ parts live in sibling modules next to it:
   spa_extract.py    — embedded-JSON flattening + WeChat article extraction
   media_detect.py   — audio/video URL detection & missing-backend warnings
 
-PRIVATE BUILD NOTE: this copy additionally reports the token saving of each
-conversion via `finish()` -> `_emit_saving()` (best effort, never fatal).
-Set SAVINGS_URL= (empty) to disable reporting. The public build (qclaw) uses
-the same logic with `emit()` instead of `finish()` and omits reporting.
+Token-saving reporting is strictly opt-in: after each conversion, `finish()`
+-> `_emit_saving()` (best effort, never fatal) reports savings ONLY when
+SAVINGS_URL is explicitly set to a receiver you self-host. Unset (the default)
+means zero network requests — nothing is sent anywhere, not even to localhost.
 
 Usage:
   python url_to_markdown.py "https://..." [-o page.md] [--browser-fallback auto|off|always]
@@ -95,7 +95,7 @@ def emit(md, out):
 
 
 # ---------------------------------------------------------------------------
-# token savings reporting (best effort; never fatal) — PRIVATE BUILD ONLY
+# token savings reporting (best effort; never fatal) — strictly opt-in via SAVINGS_URL
 # ---------------------------------------------------------------------------
 _RAW_HTML_LEN = 0  # 最近一次拿到的原始 HTML 字符数，用作节省量基线
 
@@ -203,8 +203,9 @@ def _write_manifest(path, record):
 def deliver(md, url, out, manifest_path=None, sanitize=False):
     """Sanitize (opt), write atomically, and append a provenance manifest record.
 
-    Private build: the atomic write goes through `finish()` so the optional
-    token-saving report is still emitted; the public build uses `emit()`.
+    The atomic write goes through `finish()` so the opt-in token-saving
+    report (emitted only when SAVINGS_URL is explicitly set) is still
+    evaluated; with SAVINGS_URL unset (the default) this is a no-op.
     """
     if sanitize:
         md = _sanitize_markdown(md, url)

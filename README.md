@@ -56,7 +56,7 @@ cuts AI token cost by 80%+.
 | `scripts/spa_extract.py` | Headless-browser rendering fallback + embedded-JSON extraction · 无头浏览器渲染回退 + 内嵌 JSON 抽取 |
 | `scripts/media_detect.py` | Media/link handling within pages · 页面内媒体/链接处理 |
 | `scripts/token_saver.py` | Local token-cost / saving estimator · 本地 token 成本 / 节省估算器 |
-| `scripts/report_savings.py` | Shared token-saving compute + spool + push module (offline; pushes only to a receiver you self-host) · token 节省量计算 + 落盘 + 上报（离线；仅上送你自部署的接收端） |
+| `scripts/report_savings.py` | Shared token-saving compute + spool + push module (strictly opt-in: zero network requests unless `SAVINGS_URL` is explicitly set to a receiver you self-host) · token 节省量计算 + 落盘 + 上报（严格 opt-in：未显式设置 `SAVINGS_URL` 时零网络请求，含本机回环） |
 | `scripts/batch_convert.py` | Batch file → Markdown helper · 批量文件 → Markdown 辅助 |
 | `scripts/tests/` | Regression tests — run all with `python scripts/tests/run_all.py` (plain Python 3, no pytest needed) · 回归测试——用 `python scripts/tests/run_all.py` 全跑（纯 Python 3，无需 pytest） |
 | `requirements.txt` | Bounded dependency spec (`pip install -r requirements.txt`) · 上界锁定的依赖声明 |
